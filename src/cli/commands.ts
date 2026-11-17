@@ -33,6 +33,7 @@ import type { LLMProvider } from '../providers/LLMProvider.js';
 import { startDashboard } from './dashboard.js';
 import { registerFixCommand } from './fix-command.js';
 import { registerE2ECommand, runE2ECommand } from './verify-command.js';
+import { registerPlanCommand } from './plan-command.js';
 import { registerSpecCommand } from './spec-command.js';
 
 export interface CommonFlags {
@@ -475,6 +476,15 @@ export function registerCommands(program: Command, env: AppEnv): void {
   // ── Superfície: spec · plan · build · verify · fix · ops ────────────────────
 
   registerSpecCommand(program, env);
+  const planNs = registerPlanCommand(program, env);
+
+  addCommon(
+    planNs
+      .command('draft')
+      .argument('<id>')
+      .argument('[instrucao]')
+      .description('Rascunho do desenho pelo modelo (opcional; o humano edita depois)'),
+  ).action(hPlan);
 
   const build = program
     .command('build')
@@ -594,13 +604,6 @@ export function registerCommands(program: Command, env: AppEnv): void {
   deprecate(asModels(program.command('models', { hidden: true })), 'ai ops models');
   deprecate(asDashboard(program.command('dashboard', { hidden: true })), 'ai ops dashboard');
 
-  addCommon(
-    program
-      .command('plan', { hidden: true })
-      .argument('<taskId>')
-      .argument('<requisito>')
-      .description('(depreciado) use `ai spec new` + `ai plan create`'),
-  ).action(hPlan);
   addCommon(
     program
       .command('rework', { hidden: true })

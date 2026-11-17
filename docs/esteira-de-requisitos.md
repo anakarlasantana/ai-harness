@@ -73,6 +73,18 @@ Identidade: `git config user.name` / `user.email` + usuário/host do SO.
 
 Re-aprovar é uma decisão consciente, nunca um efeito colateral.
 
+## 6.1 O segundo gate (G2) — só quando há risco
+
+`ai plan create` escreve `desenho.md` e `tarefas.md` (uma tarefa por critério,
+como ponto de partida). `ai plan verify` confere: CA órfão, tarefa sem escopo/
+fronteira, `fronteira: teste` tocando produto (e vice-versa), dependência em wave
+igual ou posterior.
+
+`ai plan approve` **dispensa o G2** quando o plano tem ≤3 tarefas e não toca
+`packages/contrato` nem migration — e nesse caso grava `plano_aprovado_por:
+dispensado`. Com risco, abre a mesma pausa do G1 e grava `plano_sha` (editar o
+plano depois invalida).
+
 ## 7. Limites
 
 - O harness **não escreve** requisito nem código: ele lê, mede e registra.

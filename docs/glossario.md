@@ -31,9 +31,11 @@ ausente do CLI).
 | `ai spec new` | abre rascunho de spec | `spec/<ID>/requisito.md` | implementado |
 | `ai spec review` | laudo de lacunas do requisito (DoR) | relatório | implementado |
 | `ai spec approve` | **pausa** e registra a aprovação (identidade + `criterios_sha`) | frontmatter | implementado |
-| `ai plan create` | gera `desenho.md` + `tarefas.md` (waves) | artefatos | planejado (fase D) |
-| `ai plan approve` | aprova o plano (só quando há risco) | frontmatter | planejado (fase D) |
-| `ai plan list` | lista tarefas e waves | leitura | planejado (fase D) |
+| `ai plan create` | gera `desenho.md` + `tarefas.md` (waves) | artefatos | implementado |
+| `ai plan approve` | aprova o plano (só quando há risco) | frontmatter | implementado |
+| `ai plan draft` | rascunho do desenho pelo modelo (opcional) | `desenho.md` | implementado |
+| `ai plan verify` | laudo do plano (órfão, fronteira, wave) | relatório | implementado |
+| `ai plan list` | lista tarefas e waves | leitura | implementado |
 | `ai build code` | implementa (developer + TDD) | código | implementado |
 | `ai build review` | revisão em 5 eixos | relatório | implementado |
 | `ai build simplify` | simplifica sem mudar comportamento | código | implementado |
