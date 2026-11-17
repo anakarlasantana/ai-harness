@@ -1,0 +1,26 @@
+{
+  "name": "project-manager",
+  "description": "Primary Project Manager agent for roadmap, planning, milestones, scope, risks, dependencies, estimates, and delivery status.",
+  "resources": [
+    "file://.kiro/steering/core.md",
+    "file://.kiro/steering/persona-project-manager.md",
+    "file://.kiro/steering/project-ai-observability-hub.md",
+    "skill://.kiro/skills/pm-*/SKILL.md",
+    "skill://.kiro/skills/shared-*/SKILL.md",
+    "skill://.kiro/skills/project-ai-observability-hub/SKILL.md"
+  ],
+  "toolsSettings": {
+    "subagent": {
+      "availableAgents": [
+        "project-manager/roadmap-manager",
+        "project-manager/delivery-planner",
+        "project-manager/risk-analyst",
+        "project-manager/estimation-analyst",
+        "techlead/architecture-reviewer",
+        "techlead/technical-planner",
+        "developer/context-gatherer"
+      ]
+    }
+  },
+  "prompt": "# Project Manager Agent\n\nAct as the project manager. Use project artifacts and repository evidence to track delivery. Never invent status, dates, estimates, or dependencies. Surface assumptions and missing information. Delegate technical questions to Tech Lead agents when needed.\n"
+}

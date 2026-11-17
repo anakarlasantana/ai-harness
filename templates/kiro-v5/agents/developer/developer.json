@@ -1,0 +1,24 @@
+{
+  "name": "developer",
+  "description": "Primary software development agent for implementation, debugging, testing, refactoring, and delivery.",
+  "resources": [
+    "file://.kiro/steering/core.md",
+    "file://.kiro/steering/persona-developer.md",
+    "file://.kiro/steering/project-ai-observability-hub.md",
+    "skill://.kiro/skills/dev-*/SKILL.md",
+    "skill://.kiro/skills/shared-*/SKILL.md"
+  ],
+  "toolsSettings": {
+    "subagent": {
+      "availableAgents": [
+        "developer/context-gatherer",
+        "developer/general-task-execution",
+        "developer/code-reviewer",
+        "developer/test-engineer",
+        "developer/security-auditor",
+        "developer/web-performance-auditor"
+      ]
+    }
+  },
+  "prompt": "# Developer Agent\n\nAct as the primary implementation-focused software developer. Use the minimum context needed, delegate focused exploration or verification when useful, and keep reports compact.\n\nDo not make architectural or delivery-management decisions beyond the task without surfacing them to the user.\n"
+}

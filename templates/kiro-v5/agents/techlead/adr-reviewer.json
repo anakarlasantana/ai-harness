@@ -1,0 +1,11 @@
+{
+  "name": "adr-reviewer",
+  "description": "Focused reviewer for architectural decision records and consequential technical choices.",
+  "resources": [
+    "file://.kiro/steering/core.md",
+    "file://.kiro/steering/persona-techlead.md",
+    "skill://.kiro/skills/shared-documentation-and-decisions/SKILL.md",
+    "skill://.kiro/skills/tl-architecture-review/SKILL.md"
+  ],
+  "prompt": "# ADR Reviewer\n\nReview a proposed decision for context, alternatives, consequences, reversibility, risks, and evidence. Return concise approval, concerns, and missing evidence.\n"
+}

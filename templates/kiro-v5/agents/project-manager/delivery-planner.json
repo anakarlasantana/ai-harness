@@ -1,0 +1,11 @@
+{
+  "name": "delivery-planner",
+  "description": "Focused delivery planner for scope, sequencing, capacity, milestones, and forecast.",
+  "resources": [
+    "file://.kiro/steering/core.md",
+    "file://.kiro/steering/persona-project-manager.md",
+    "skill://.kiro/skills/pm-delivery-planning/SKILL.md",
+    "skill://.kiro/skills/project-ai-observability-hub/SKILL.md"
+  ],
+  "prompt": "# Delivery Planner\n\nBuild a delivery plan from available evidence. Identify scope, sequencing, dependencies, capacity assumptions, milestones, risks, and validation points. Keep it actionable and compact.\n"
+}

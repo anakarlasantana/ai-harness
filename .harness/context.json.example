@@ -1,0 +1,94 @@
+{
+  // Provider this app should use: "kiro" | "openai" | "claude"
+  // (overrides HARNESS_PROVIDER from .env). One provider per app.
+  "provider": "openai",
+
+  // ── Model per stage/persona (cost optimization) ──────────────────────────────
+  // Spend the strong model where reasoning matters (plan/rework/review/design),
+  // use the cheap model where there's token volume (code/qa/sync).
+  "models": {
+    "plan": "deepseek-chat",
+    "spec": "deepseek-chat",
+    "rework": "deepseek-chat",
+    "review": "deepseek-chat",
+    "ship": "deepseek-chat",
+    "debug": "deepseek-chat",
+    "code": "deepseek-flash",
+    "qa": "deepseek-flash",
+    "e2e": "deepseek-flash",
+    "sync": "deepseek-flash",
+    "simplify": "deepseek-flash",
+    "constraints": "deepseek-flash",
+    "webperf": "deepseek-chat",
+    "design": "gpt-4o",            // needs vision
+    "design-review": "gpt-4o",
+    "design-code": "deepseek-flash"
+  },
+  "defaultModel": "deepseek-flash",
+
+  // Optional per-stage sampling overrides.
+  "stages": {
+    "qa": { "temperature": 0, "maxTokens": 2000 },
+    "sync": { "temperature": 0 }
+  },
+
+  // App architecture rules injected into the System Prompt.
+  "architectureRules": [
+    "Sempre use injeção de dependência; nunca instancie serviços diretamente.",
+    "Toda regra de negócio deve residir na camada de domínio, não em controllers.",
+    "Não adicione dependências novas sem justificar trade-offs."
+  ],
+
+  // Override the stack-detected commands.
+  "lintCommand": "npm run lint",
+  "testCommand": "npm test",
+  "buildCommand": "npm run build",
+
+  // ── Verificação (lida por `ai e2e`) ─────────────────────────────────────────
+  // O "definition of done" do repositório em UM comando. Vence `testCommand`.
+  "verification": {
+    "readiness": { "command": "make ready", "timeoutMs": 300000 }
+  },
+  // Ciclo ponta-a-ponta: tudo é comando declarado (o harness não adivinha stack).
+  "e2e": {
+    "before": ["make e2e-up"],
+    "command": "make e2e",
+    "after": ["make e2e-down"],
+    "journey": { "cliente": "make e2e-cliente" },
+    "timeoutMs": 900000,
+    "evidenceDir": "evidence",
+    "digest": "resumo.md",
+    "logs": [
+      { "name": "backend", "command": "docker compose -p app_e2e logs --since {since} backend" }
+    ],
+    "allowlist": [{ "status": 404, "path": "/store/locales" }]
+  },
+
+  // Optional: point to a different style guide inside .harness/
+  // "styleGuide": "instructions.md",
+
+  // Per-app MCP servers (same shape as Kiro's mcp.json `mcpServers`).
+  // These are the ONLY servers loaded by default (safe + token-efficient).
+  "mcpServers": {
+    // Figma MCP for design personas. Requires FIGMA_ACCESS_TOKEN in .env
+    // (Bearer injected automatically). Without a token, pass a screenshot path.
+    "figma": {
+      "type": "streamableHttp",
+      "url": "https://mcp.figma.com/mcp",
+      "autoApprove": ["get_design_context", "get_metadata", "get_variable_defs", "get_screenshot"]
+    },
+    "postgres_sin": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost:5432/db"],
+      "autoApprove": ["query"]
+    }
+  },
+
+  // Which MCP tools each stage is allowed to use (whitelist; token economy).
+  "mcpTools": {
+    "design": ["figma.get_design_context", "figma.get_metadata", "figma.get_variable_defs", "figma.get_screenshot"],
+    "design-review": ["figma.get_screenshot"],
+    "code": ["postgres_sin.query"]
+  }
+}
+

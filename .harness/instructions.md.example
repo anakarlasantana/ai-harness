@@ -1,0 +1,30 @@
+# Guias de Estilo do App
+
+Este arquivo é **anexado automaticamente** ao final do System Prompt de todas
+as etapas (plan, code, qa, rework, sync). Use-o para regras locais que valem
+para este repositório específico.
+
+## Padrões de código
+
+- Sempre use injeção de dependência.
+- Nomeie arquivos em `kebab-case`.
+- Escreva testes antes da implementação (TDD: RED → GREEN → refactor).
+- Nunca use `any` em TypeScript; prefira tipos explícitos.
+
+## Padrão de commits corporativo
+
+Formato: `tipo(escopo): descrição curta`
+
+- `feat` — nova funcionalidade
+- `fix` — correção de bug
+- `refactor` — refatoração sem mudança de comportamento
+- `test` — testes
+- `docs` — documentação
+
+Exemplo: `feat(auth): adiciona login via SSO corporativo`
+
+## Restrições
+
+- Não adicione dependências novas sem aprovação.
+- Mantenha cobertura de testes ≥ 80%.
+- Respeite os limites de camada (domain ↔ application ↔ infra).

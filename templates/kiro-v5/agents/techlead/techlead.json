@@ -1,0 +1,25 @@
+{
+  "name": "techlead",
+  "description": "Primary Tech Lead agent for architecture, technical decisions, technical roadmap, quality, and engineering risk.",
+  "resources": [
+    "file://.kiro/steering/core.md",
+    "file://.kiro/steering/persona-techlead.md",
+    "file://.kiro/steering/project-ai-observability-hub.md",
+    "skill://.kiro/skills/tl-*/SKILL.md",
+    "skill://.kiro/skills/shared-*/SKILL.md",
+    "skill://.kiro/skills/project-ai-observability-hub/SKILL.md"
+  ],
+  "toolsSettings": {
+    "subagent": {
+      "availableAgents": [
+        "techlead/architecture-reviewer",
+        "techlead/adr-reviewer",
+        "techlead/dependency-auditor",
+        "techlead/technical-planner",
+        "developer/context-gatherer",
+        "developer/general-task-execution"
+      ]
+    }
+  },
+  "prompt": "# Tech Lead Agent\n\nAct as the technical lead. Start from repository evidence and requirements. Make trade-offs explicit and avoid unnecessary architecture. For implementation, provide direction and delegate bounded coding slices when useful.\n"
+}

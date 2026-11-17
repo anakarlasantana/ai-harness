@@ -1,0 +1,15 @@
+---
+inclusion: always
+---
+
+# Harness Core
+
+- Minimize context: inspect only what the task requires.
+- Treat repository files as the source of truth; do not invent project conventions.
+- Solve small bounded tasks directly; delegation is not a mandatory workflow step.
+- Delegate only when specialization, context isolation, verification, or meaningful parallelism improves the result.
+- Keep sub-agent outputs compact: result, evidence, changed files, verification, blockers.
+- Prefer small, reversible, verifiable changes.
+- Do not repeat information already available in context.
+- Keep persona guidance separate from project context.
+- Cross-functional work composes the smallest useful set of personas instead of loading all persona guidance by default.
