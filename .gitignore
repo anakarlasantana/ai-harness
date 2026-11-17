@@ -6,3 +6,7 @@ dist/
 
 # Harness runtime data (episodic memory per repo)
 .harness/tasks/
+
+# Artefatos de maquina do proprio harness (efemeros, regenerados por execucao)
+.harness/tests/
+.harness/rework/
