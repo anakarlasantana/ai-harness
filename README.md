@@ -17,20 +17,25 @@ npm link          # expõe o binário global "ai"
 ## Uso (na raiz do SEU repositório)
 
 ```bash
-ai plan   <taskId> "<requisito>"     # planejamento/arquitetura
-ai code   <taskId> "<instrução>"     # implementação (TDD)
-ai qa     <taskId>                   # loop local de lint/test (≤3 tentativas)
-ai e2e    [taskId]                   # prontidão / jornadas declaradas pelo app
-ai fix    <rwId> [--verificar]       # conduz um rework: fronteira, branch, dossiê, veredito
-ai rework <taskId> "<feedback/bug>"  # correção guiada por histórico de QA
-ai sync   <taskId>                   # resolução de conflitos Git + sprint
-ai dashboard [--port 3000]           # monitor visual em tempo real
+ai spec   list                 # specs do alvo (id, estado)   [new/review/approve: fase C]
+ai plan   create <specId>      # desenho + tarefas (waves)     [fase D]
+ai build  code <taskId> "<instrução>"   # implementação (developer + TDD)
+ai build  review|simplify|ship|design|webperf|debug <taskId>
+ai verify ready                # o "definition of done" declarado pelo alvo
+ai verify e2e [--journey nome] # jornadas ponta-a-ponta + digest
+ai fix    <rwId> [--verificar] # conduz um rework (fronteira, branch, veredito)
+ai ops    dashboard|doctor|models|index
 ```
+
+A superfície é a de [docs/glossario.md](docs/glossario.md) — fonte única; `npm run
+check:cli` reprova quando o CLI e o glossário divergem. Os nomes antigos
+(`ai code`, `ai qa`, `ai e2e`, `ai doctor`, …) continuam funcionando, escondidos e
+com aviso de depreciação.
 
 Flags comuns: `--provider kiro|openai|claude` · `--templates <path>` ·
 `--dry-run` · `--json` · `--max-iterations <n>` · `--mcp-from-kiro`.
 
-Diagnóstico: `ai doctor [--probe]` · `ai models`.
+Diagnóstico: `ai ops doctor [--probe]` · `ai ops models`.
 
 ## Provedores
 
@@ -83,7 +88,7 @@ Coloque na raiz do seu repositório:
 ├── context.json        # provider, regras, comandos, MCP, verificação (e2e)
 ├── instructions.md     # guias de estilo — anexados ao System Prompt
 ├── tasks/<id>.json     # memória episódica (gerada automaticamente)
-└── tests/<runId>/      # digest de cada execução de `ai e2e` (gerado)
+└── tests/<runId>/      # digest de cada execução de `ai verify e2e` (gerado)
 ```
 
 Veja `.harness/context.json.example` e `.harness/instructions.md.example`. Se não
@@ -112,9 +117,9 @@ iterações por tarefa (configurável). Subprocessos MCP são encerrados de form
 
 ## Dashboard
 
-`ai dashboard` sobe `http://127.0.0.1:3000` com timeline, árvore de transição de
+`ai ops dashboard` sobe `http://127.0.0.1:3000` com timeline, árvore de transição de
 personas, log de pensamento da IA **e o painel "Testes das aplicações"**:
-cada execução de `ai e2e`/`ai e2e --readiness` aparece com status, duração,
+cada execução de `ai verify e2e` / `ai verify ready` aparece com status, duração,
 passos (chips), 5xx, erros de console e o caminho do digest — ao vivo, porque o
 CLI grava na memória da task a cada passo (auto-refresh 3s, Tailwind via CDN).
 API: `GET /api/traces`, `GET /api/tests`, `GET /api/traces/:id`.

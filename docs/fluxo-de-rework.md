@@ -1,6 +1,6 @@
 # Fluxo de rework: do relato ao patch verificado
 
-O `ai e2e` produz o achado; este fluxo o leva até um patch **verificado**, sem
+O `ai verify e2e` produz o achado; este fluxo o leva até um patch **verificado**, sem
 que o agente que corrige seja o mesmo que julga — e sem que ele conserte as
 próprias regras.
 

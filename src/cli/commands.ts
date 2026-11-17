@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import type { Command } from 'commander';
 import type { AppEnv, ProviderKind } from '../config/env.js';
@@ -31,7 +32,7 @@ import {
 import type { LLMProvider } from '../providers/LLMProvider.js';
 import { startDashboard } from './dashboard.js';
 import { registerFixCommand } from './fix-command.js';
-import { registerVerifyCommand } from './verify-command.js';
+import { registerE2ECommand, runE2ECommand } from './verify-command.js';
 
 export interface CommonFlags {
   provider?: ProviderKind;
@@ -260,6 +261,35 @@ function outputResult(flags: CommonFlags, text: string, meta: Record<string, unk
   );
 }
 
+/** Specs do alvo: `spec/<ID>-<slug>/requisito.md` com frontmatter YAML. */
+function listSpecs(cwd: string): { id: string; estado: string; slug: string }[] {
+  const dir = path.join(cwd, 'spec');
+  let entries: fs.Dirent[] = [];
+
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const out: { id: string; estado: string; slug: string }[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const fp = path.join(dir, entry.name, 'requisito.md');
+    if (!fs.existsSync(fp)) continue;
+
+    const front = /^---\n([\s\S]*?)\n---/.exec(fs.readFileSync(fp, 'utf8'))?.[1] ?? '';
+    const id = /^id:\s*(.+)$/m.exec(front)?.[1]?.trim().replace(/^["']|["']$/g, '') ?? entry.name;
+    const estado =
+      /^estado:\s*(.+)$/m.exec(front)?.[1]?.trim().replace(/^["']|["']$/g, '') ?? 'rascunho';
+
+    out.push({ id, estado, slug: entry.name });
+  }
+
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export function registerCommands(program: Command, env: AppEnv): void {
   const addCommon = (cmd: Command): Command =>
     cmd
@@ -272,13 +302,21 @@ export function registerCommands(program: Command, env: AppEnv): void {
       .option('--model <name>', 'override do modelo para esta execução')
       .option('--sequential', 'especialistas em sequência (modo econômico)');
 
-  addCommon(
-    program
-      .command('plan')
-      .argument('<taskId>')
-      .argument('<requisito>')
-      .description('Stage plan: planejamento/arquitetura (project-manager + roadmap)'),
-  ).action(async (taskId: string, requisito: string, opts: CommonFlags) => {
+  /**
+   * Nome antigo: continua funcionando, avisa no stderr e não aparece no `--help`.
+   * A superfície visível é a do docs/glossario.md — `npm run check:cli` confere.
+   */
+  const deprecate = (cmd: Command, novo: string): Command =>
+    cmd
+      .hook('preAction', () => {
+        log.warn(`"${cmd.name()}" está depreciado — use \`${novo}\`.`);
+      });
+
+  // ── Handlers: uma implementação por intenção ──────────────────────────────
+  // O nome novo e o antigo chamam o MESMO handler: não existem dois caminhos
+  // para o mesmo trabalho.
+
+  const hPlan = async (taskId: string, requisito: string, opts: CommonFlags): Promise<void> => {
     const memory = new TaskMemory(env.cwd);
     await runStage({
       env,
@@ -291,15 +329,9 @@ export function registerCommands(program: Command, env: AppEnv): void {
           if (!t.description) t.description = requisito;
         }),
     });
-  });
+  };
 
-  addCommon(
-    program
-      .command('code')
-      .argument('<taskId>')
-      .argument('<instrucao>')
-      .description('Stage code: implementação (developer + TDD)'),
-  ).action(async (taskId: string, instrucao: string, opts: CommonFlags) => {
+  const hCode = async (taskId: string, instrucao: string, opts: CommonFlags): Promise<void> => {
     const memory = new TaskMemory(env.cwd);
     await runStage({
       env,
@@ -309,15 +341,9 @@ export function registerCommands(program: Command, env: AppEnv): void {
       userText: instrucao,
       ensureTask: () => memory.require(taskId),
     });
-  });
+  };
 
-  addCommon(
-    program
-      .command('rework')
-      .argument('<taskId>')
-      .argument('<feedback>')
-      .description('Stage rework: correção guiada por QA/bug (techlead + ADRs + histórico)'),
-  ).action(async (taskId: string, feedback: string, opts: CommonFlags) => {
+  const hRework = async (taskId: string, feedback: string, opts: CommonFlags): Promise<void> => {
     const memory = new TaskMemory(env.cwd);
     await memory.appendQaFeedback(taskId, `Rework solicitado: ${feedback}`);
     await runStage({
@@ -328,14 +354,9 @@ export function registerCommands(program: Command, env: AppEnv): void {
       userText: feedback,
       ensureTask: () => memory.require(taskId),
     });
-  });
+  };
 
-  addCommon(
-    program
-      .command('sync')
-      .argument('<taskId>')
-      .description('Stage sync: resolução de conflitos Git e alinhamento de sprint'),
-  ).action(async (taskId: string, opts: CommonFlags) => {
+  const hSync = async (taskId: string, opts: CommonFlags): Promise<void> => {
     const memory = new TaskMemory(env.cwd);
     await runStage({
       env,
@@ -345,26 +366,19 @@ export function registerCommands(program: Command, env: AppEnv): void {
       userText: 'Sincronize o repositório: resolva conflitos lógicos e alinhe com a sprint.',
       ensureTask: () => memory.require(taskId),
     });
-  });
+  };
 
-  // QA: local lint/test loop (≤3 attempts).
-  addCommon(
-    program
-      .command('qa')
-      .argument('<taskId>')
-      .description('Stage qa: loop local de lint/test (≤3 tentativas)'),
-  ).action(async (taskId: string, opts: CommonFlags) => {
+  const hQa = async (taskId: string, opts: CommonFlags): Promise<void> => {
     const session = buildSession(env, opts, 'qa');
     const task = await session.memory.require(taskId);
     const local = LocalContextLoader.load(env.cwd);
     const stack = detectStack(env.cwd, local.config);
 
-    // A prontidão declarada pelo alvo vence a detecção: `ai qa` roda o MESMO
-    // comando que o time chama de "está pronto" (ex.: `make ready`).
     if (stack.readinessCmd) {
       stack.testCmd = stack.readinessCmd;
       stack.lintCmd = undefined;
     }
+
     const systemPrompt = session.assembler.buildSystemPrompt('qa', task, { hasTools: true });
     const orchestrator = new Orchestrator();
     const maxIterations = opts.maxIterations
@@ -410,138 +424,245 @@ export function registerCommands(program: Command, env: AppEnv): void {
       toolCalls: 0,
       hitCap: false,
     });
-  });
-
-  // ── Workflow commands (FASE 3) — each reuses runStage ──────────────────────
-  // Convention: taskId is ALWAYS the first positional arg (consistent UX).
-  const workflow = (
-    name: string,
-    stage: StageName,
-    desc: string,
-    textArgName?: string,
-    defaultText = '',
-    requiresTask = true,
-  ): void => {
-    let cmd = program.command(name).argument('<taskId>').description(desc);
-    if (textArgName) cmd = cmd.argument(`<${textArgName}>`);
-    addCommon(cmd).action(
-      async (...params: unknown[]) => {
-        // commander passes: (...declaredArgs, optionsObject, commandInstance)
-        const opts = params[params.length - 2] as CommonFlags;
-        const taskId = params[0] as string;
-        const text = textArgName ? (params[1] as string) : defaultText;
-        const memory = new TaskMemory(env.cwd);
-        await runStage({
-          env,
-          flags: opts,
-          stage,
-          taskId,
-          userText: text,
-          ensureTask: requiresTask
-            ? () => memory.require(taskId)
-            : () =>
-                memory.update(taskId, (t) => {
-                  if (!t.description) t.description = text;
-                }),
-        });
-      },
-    );
   };
 
-  workflow('spec', 'spec', 'Spec-driven: gera SPEC.md (requisitos + fronteiras)', 'requisito', '', false);
-  workflow('review', 'review', 'Revisão em 5 eixos (fan-out: code-reviewer + security + arch)');
-  workflow('ship', 'ship', 'Checklist de pré-lançamento (fan-out go/no-go)');
-  workflow('simplify', 'simplify', 'Simplificação de código sem mudar comportamento');
-  workflow('constraints', 'constraints', 'Define a barra de qualidade do projeto');
-  workflow('webperf', 'webperf', 'Auditoria de performance web');
-  workflow('debug', 'debug', 'Debug guiado por root-cause', 'bug');
-  workflow('design', 'design', 'Analisa protótipo (Figma MCP ou screenshot) → spec de UI', 'prototipo', '', false);
-  workflow('design-review', 'design-review', 'Fidelidade implementação vs protótipo');
-  workflow('design-code', 'design-code', 'Implementa UI fiel ao design (design system + WCAG)', 'instrucao');
+  /** Etapa guiada por modelo (review, ship, design, ...). */
+  const hStage =
+    (stage: StageName, defaultText = '', textArgName?: string, requiresTask = true) =>
+    async (...params: unknown[]): Promise<void> => {
+      const opts = params[params.length - 2] as CommonFlags;
+      const taskId = params[0] as string;
+      const text = textArgName ? (params[1] as string) : defaultText;
+      const memory = new TaskMemory(env.cwd);
+      await runStage({
+        env,
+        flags: opts,
+        stage,
+        taskId,
+        userText: text,
+        ensureTask: requiresTask
+          ? () => memory.require(taskId)
+          : () =>
+              memory.update(taskId, (t) => {
+                if (!t.description) t.description = text;
+              }),
+      });
+    };
 
-  // ── Verificação (prontidão + ponta-a-ponta declarados pelo alvo) ───────────
-  registerVerifyCommand(program, env);
+  const hSpecList = async (opts: { json?: boolean; dir?: string }): Promise<void> => {
+    const cwd = opts.dir ? path.resolve(opts.dir) : env.cwd;
+    const specs = listSpecs(cwd);
 
-  // ── Rework: do relato ao patch verificado ──────────────────────────────────
+    if (opts.json) {
+      console.log(JSON.stringify({ specs }, null, 2));
+      return;
+    }
+
+    if (specs.length === 0) {
+      console.log('Nenhuma spec em spec/. Crie com `ai spec new` (fase C).');
+      return;
+    }
+
+    for (const s of specs) console.log(`${s.id.padEnd(10)} ${s.estado.padEnd(12)} ${s.slug}`);
+  };
+
+  const hIndex = (opts: { check?: boolean; json?: boolean; print?: boolean }): void => {
+    if (opts.check) {
+      const stale = RepoIndex.isStale(env.cwd);
+      if (opts.json) console.log(JSON.stringify({ stale }));
+      else if (stale) log.warn('Mapa desatualizado — rode `ai ops index`.');
+      else log.ok('Mapa atualizado.');
+      if (stale) process.exitCode = 1;
+      return;
+    }
+
+    const map = RepoIndex.readOrRefresh(env.cwd);
+    const tokens = Math.round(map.length / 4);
+
+    if (opts.print) console.log(map);
+
+    if (opts.json) {
+      console.log(JSON.stringify({ chars: map.length, tokens, path: RepoIndex.mapPath(env.cwd) }));
+      return;
+    }
+    log.ok(`Mapa gerado: ${map.length} chars (~${tokens} tokens) em ${RepoIndex.mapPath(env.cwd)}`);
+  };
+
+  const hDoctor = async (opts: { probe?: boolean; json?: boolean }): Promise<void> => {
+    const report = buildDoctorReport(env);
+
+    if (opts.json) console.log(JSON.stringify(report, null, 2));
+    else console.log('\n' + formatDoctorReport(report) + '\n');
+
+    if (opts.probe) {
+      const probe = await probeModels(env);
+      if (opts.json) console.log(JSON.stringify({ probe }, null, 2));
+      else reportModelsProbe(probe, report.model);
+    }
+  };
+
+  const hModels = async (opts: { json?: boolean }): Promise<void> => {
+    const report = buildDoctorReport(env);
+    const probe = await probeModels(env);
+    if (opts.json) {
+      console.log(JSON.stringify(probe, null, 2));
+      return;
+    }
+    reportModelsProbe(probe, report.model);
+  };
+
+  const hDashboard = async (opts: { port?: string; dir?: string }): Promise<void> => {
+    const cwd = opts.dir ? path.resolve(opts.dir) : env.cwd;
+    await startDashboard({ cwd, port: opts.port ? Number(opts.port) : undefined });
+    log.info('Pressione Ctrl+C para encerrar o dashboard.');
+  };
+
+  // ── Superfície: spec · plan · build · verify · fix · ops ────────────────────
+
+  const spec = program.command('spec').description('Levantamento: requisitos, critérios e aprovação');
+  spec
+    .command('list')
+    .description('Lista as specs do alvo (id, estado, pasta)')
+    .option('--json', 'saída em JSON')
+    .option('--dir <path>', 'diretório do repositório (default: cwd)')
+    .action(hSpecList);
+
+  const build = program
+    .command('build')
+    .description('Execução: implementar, revisar, simplificar, entregar, desenhar, auditar');
+
+  const asCode = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').argument('<instrucao>').description('Implementa (developer + TDD)'))
+      .action(hCode);
+  const asReview = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').description('Revisão em 5 eixos (code-reviewer + security + arch)'))
+      .action(hStage('review'));
+  const asSimplify = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').description('Simplifica sem mudar comportamento'))
+      .action(hStage('simplify'));
+  const asShip = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').description('Checklist de pré-lançamento (go/no-go)'))
+      .action(hStage('ship'));
+  const asConstraints = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').description('Define a barra de qualidade do projeto'))
+      .action(hStage('constraints'));
+  const asWebperf = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').description('Auditoria de performance web'))
+      .action(hStage('webperf'));
+  const asDebug = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').argument('<bug>').description('Debug guiado por root-cause'))
+      .action(hStage('debug', '', 'bug'));
+  const asDesign = (cmd: Command): Command =>
+    addCommon(
+      cmd
+        .argument('<taskId>')
+        .argument('<prototipo>')
+        .description('Analisa protótipo (Figma MCP ou screenshot) → spec de UI'),
+    ).action(hStage('design', '', 'prototipo', false));
+  const asDesignReview = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').description('Fidelidade implementação × protótipo'))
+      .action(hStage('design-review'));
+  const asDesignCode = (cmd: Command): Command =>
+    addCommon(cmd.argument('<taskId>').argument('<instrucao>').description('Implementa UI fiel ao design'))
+      .action(hStage('design-code'));
+
+  asCode(build.command('code'));
+  asReview(build.command('review'));
+  asSimplify(build.command('simplify'));
+  asShip(build.command('ship'));
+  asConstraints(build.command('constraints'));
+  asWebperf(build.command('webperf'));
+  asDebug(build.command('debug'));
+  asDesign(build.command('design'));
+  asDesignReview(build.command('design-review'));
+  asDesignCode(build.command('design-code'));
+
+  const verify = program
+    .command('verify')
+    .description('Verificação: prontidão, jornadas e provas dos critérios');
+
+  verify
+    .command('ready')
+    .argument('[taskId]', 'id da execução')
+    .description('Roda o "definition of done" declarado pelo alvo (verification.readiness)')
+    .option('--json', 'saída em JSON')
+    .option('--dir <path>', 'diretório do repositório (default: cwd)')
+    .action((taskId: string | undefined, opts: { json?: boolean; dir?: string }) =>
+      runE2ECommand(taskId, { ...opts, readiness: true }, env),
+    );
+
+  registerE2ECommand(verify, env);
   registerFixCommand(program, env);
 
-  // ── Repo index ─────────────────────────────────────────────────────────────
-  program
-    .command('index')
-    .description('Gera/atualiza o mapa do repositorio (.harness/context/repo-map.md)')
-    .option('--check', 'sai com codigo 1 se o mapa estiver desatualizado (CI)')
-    .option('--json', 'metricas em JSON')
-    .option('--print', 'imprime o mapa completo')
-    .action((opts: { check?: boolean; json?: boolean; print?: boolean }) => {
-      if (opts.check) {
-        const stale = RepoIndex.isStale(env.cwd);
-        if (opts.json) console.log(JSON.stringify({ stale }));
-        else if (stale) log.warn('Mapa desatualizado — rode `ai index`.');
-        else log.ok('Mapa atualizado.');
-        if (stale) process.exitCode = 1;
-        return;
-      }
+  const ops = program.command('ops').description('Ferramentas: configuração, modelos, mapa e dashboard');
 
-      const map = RepoIndex.readOrRefresh(env.cwd);
-      const tokens = Math.round(map.length / 4);
+  const asIndex = (cmd: Command): Command =>
+    cmd
+      .description('Gera/atualiza o mapa do repositório (.harness/context/repo-map.md)')
+      .option('--check', 'sai com código 1 se o mapa estiver desatualizado (CI)')
+      .option('--json', 'métricas em JSON')
+      .option('--print', 'imprime o mapa completo')
+      .action(hIndex);
+  const asDoctor = (cmd: Command): Command =>
+    cmd
+      .description('Mostra a configuração efetiva de endpoint/modelo (env > context.json)')
+      .option('--probe', 'também consulta GET /models no endpoint')
+      .option('--json', 'saída em JSON')
+      .action(hDoctor);
+  const asModels = (cmd: Command): Command =>
+    cmd
+      .description('Lista os modelos que o endpoint configurado realmente expõe')
+      .option('--json', 'saída em JSON')
+      .action(hModels);
+  const asDashboard = (cmd: Command): Command =>
+    cmd
+      .description('Sobe o dashboard local (http://127.0.0.1:3000)')
+      .option('--port <n>', 'porta HTTP')
+      .option('--dir <path>', 'diretório do repositório (default: cwd)')
+      .action(hDashboard);
 
-      if (opts.print) console.log(map);
+  asIndex(ops.command('index'));
+  asDoctor(ops.command('doctor'));
+  asModels(ops.command('models'));
+  asDashboard(ops.command('dashboard'));
 
-      if (opts.json) {
-        console.log(JSON.stringify({ chars: map.length, tokens, path: RepoIndex.mapPath(env.cwd) }));
-        return;
-      }
-      log.ok(`Mapa gerado: ${map.length} chars (~${tokens} tokens) em ${RepoIndex.mapPath(env.cwd)}`);
-    });
+  // ── Nomes antigos (ocultos): funcionam, avisam e saem na próxima versão ────
 
-  // ── Diagnostics ────────────────────────────────────────────────────────────
-  program
-    .command('doctor')
-    .description('Mostra a configuração efetiva de endpoint/modelo (env > context.json)')
-    .option('--probe', 'também consulta GET /models no endpoint')
-    .option('--json', 'saída em JSON')
-    .action(async (opts: { probe?: boolean; json?: boolean }) => {
-      const report = buildDoctorReport(env);
+  deprecate(asCode(program.command('code', { hidden: true })), 'ai build code');
+  deprecate(asReview(program.command('review', { hidden: true })), 'ai build review');
+  deprecate(asSimplify(program.command('simplify', { hidden: true })), 'ai build simplify');
+  deprecate(asShip(program.command('ship', { hidden: true })), 'ai build ship');
+  deprecate(asConstraints(program.command('constraints', { hidden: true })), 'ai build constraints');
+  deprecate(asWebperf(program.command('webperf', { hidden: true })), 'ai build webperf');
+  deprecate(asDebug(program.command('debug', { hidden: true })), 'ai build debug');
+  deprecate(asDesign(program.command('design', { hidden: true })), 'ai build design');
+  deprecate(asDesignReview(program.command('design-review', { hidden: true })), 'ai build design-review');
+  deprecate(asDesignCode(program.command('design-code', { hidden: true })), 'ai build design-code');
 
-      if (opts.json) {
-        console.log(JSON.stringify(report, null, 2));
-      } else {
-        console.log('\n' + formatDoctorReport(report) + '\n');
-      }
+  registerE2ECommand(program, env, { deprecatedAs: 'ai verify e2e' });
+  deprecate(asIndex(program.command('index', { hidden: true })), 'ai ops index');
+  deprecate(asDoctor(program.command('doctor', { hidden: true })), 'ai ops doctor');
+  deprecate(asModels(program.command('models', { hidden: true })), 'ai ops models');
+  deprecate(asDashboard(program.command('dashboard', { hidden: true })), 'ai ops dashboard');
 
-      if (opts.probe) {
-        const probe = await probeModels(env);
-        if (opts.json) {
-          console.log(JSON.stringify({ probe }, null, 2));
-        } else {
-          reportModelsProbe(probe, report.model);
-        }
-      }
-    });
-
-  program
-    .command('models')
-    .description('Lista os modelos que o endpoint configurado realmente expõe (GET /models)')
-    .option('--json', 'saída em JSON')
-    .action(async (opts: { json?: boolean }) => {
-      const report = buildDoctorReport(env);
-      const probe = await probeModels(env);
-      if (opts.json) {
-        console.log(JSON.stringify(probe, null, 2));
-        return;
-      }
-      reportModelsProbe(probe, report.model);
-    });
-
-  // Dashboard.
-  program
-    .command('dashboard')
-    .description('Sobe o dashboard local (http://127.0.0.1:3000)')
-    .option('--port <n>', 'porta HTTP')
-    .option('--dir <path>', 'diretório do repositório (default: cwd)')
-    .action(async (opts: { port?: string; dir?: string }) => {
-      const cwd = opts.dir ? path.resolve(opts.dir) : env.cwd;
-      await startDashboard({ cwd, port: opts.port ? Number(opts.port) : undefined });
-      log.info('Pressione Ctrl+C para encerrar o dashboard.');
-    });
+  addCommon(
+    program
+      .command('plan', { hidden: true })
+      .argument('<taskId>')
+      .argument('<requisito>')
+      .description('(depreciado) use `ai spec new` + `ai plan create`'),
+  ).action(hPlan);
+  addCommon(
+    program
+      .command('rework', { hidden: true })
+      .argument('<taskId>')
+      .argument('<feedback>')
+      .description('(depreciado) use `ai fix --task --feedback`'),
+  ).action(hRework);
+  addCommon(
+    program.command('sync', { hidden: true }).argument('<taskId>').description('(depreciado) sync de repositório'),
+  ).action(hSync);
+  addCommon(
+    program.command('qa', { hidden: true }).argument('<taskId>').description('(depreciado) use `ai verify ready`'),
+  ).action(hQa);
 }

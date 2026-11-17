@@ -15,8 +15,8 @@ import type {
  * Executor do ciclo ponta-a-ponta declarado pelo alvo.
  *
  * `before → command → logs → after`, com o `after` garantido em `finally` (uma
- * stack que sobe e não desce envenena a próxima execução). Nada de semântica de
- * aplicação aqui: cada passo é um comando que o app declarou.
+ * stack que sobe e não desce envenena a próxima execução) e os **logs lidos
+ * antes dele** — a limpeza pode remover os containers e levar o log junto.
  */
 export interface RunE2EOptions {
   cwd: string;
@@ -58,6 +58,7 @@ export class E2ERunner {
     };
 
     let aborted = false;
+    let logs: E2ELogTail[] = [];
 
     try {
       if (!opts.skipBefore) {
@@ -80,6 +81,11 @@ export class E2ERunner {
         );
         await record(step);
       }
+
+      // Os logs são lidos AQUI, antes do `after`: a limpeza pode remover os
+      // containers (`compose down`) e levar o log com eles — sem esta ordem, o
+      // caminho feliz do contrato perde a seção `## logs` do digest.
+      logs = await this.collectLogs(declaration, cwd, startedAt.toISOString());
     } finally {
       if (!opts.keep) {
         for (const [i, cmd] of declaration.after.entries()) {
@@ -99,8 +105,6 @@ export class E2ERunner {
       }
     }
 
-    const since = startedAt.toISOString();
-    const logs = await this.collectLogs(declaration, cwd, since);
     const evidenceDir = this.newestEvidenceDir(cwd, declaration.evidenceDir, startedAt);
     const digestPath = evidenceDir ? path.join(evidenceDir, declaration.digest) : undefined;
     const digest = digestPath ? this.readText(digestPath) : undefined;

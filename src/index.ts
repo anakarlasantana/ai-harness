@@ -26,7 +26,9 @@ async function main(): Promise<void> {
   const program = new Command();
   program
     .name('ai')
-    .description('Harness multi-agente universal: plan · code · qa · rework · sync · dashboard')
+    .description(
+      'Harness multi-agente universal: spec · plan · build · verify · fix · ops (docs/glossario.md)',
+    )
     .version('0.1.0');
 
   registerCommands(program, env);

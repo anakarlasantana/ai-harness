@@ -30,10 +30,20 @@ interface VerifyFlags {
   dir?: string;
 }
 
-export function registerVerifyCommand(program: Command, env: AppEnv): void {
-  program
-    .command('e2e')
-    .argument('[taskId]', 'id da task (default: e2e-<jornada>-<timestamp>)')
+export interface E2ERegisterOptions {
+  /** Quando definido, o comando entra como depreciado (oculto + aviso). */
+  deprecatedAs?: string;
+}
+
+/** Registra `e2e` sob um pai (topo do CLI ou o namespace `verify`). */
+export function registerE2ECommand(
+  parent: Command,
+  env: AppEnv,
+  options: E2ERegisterOptions = {},
+): void {
+  const cmd = parent
+    .command('e2e', { hidden: Boolean(options.deprecatedAs) })
+    .argument('[taskId]', 'id da execução (default: readiness|e2e-<jornada>-<timestamp>)')
     .description('Roda a prontidão (`--readiness`) ou as jornadas ponta-a-ponta declaradas pelo alvo')
     .option('--journey <nome>', 'jornada declarada em e2e.journey (ex.: cliente)')
     .option('--readiness', 'roda só o "definition of done" (verification.readiness)')
@@ -41,7 +51,23 @@ export function registerVerifyCommand(program: Command, env: AppEnv): void {
     .option('--skip-before', 'pula os passos de preparação (`e2e.before`)')
     .option('--json', 'saída em JSON')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
-    .action(async (taskIdArg: string | undefined, opts: VerifyFlags) => {
+    .action((taskIdArg: string | undefined, opts: VerifyFlags) =>
+      runE2ECommand(taskIdArg, opts, env),
+    );
+
+  if (options.deprecatedAs) {
+    cmd.hook('preAction', () => {
+      log.warn(`"e2e" está depreciado — use \`${options.deprecatedAs}\`.`);
+    });
+  }
+}
+
+/** O corpo de `verify e2e` / `verify ready` (readiness é o mesmo ciclo, sem jornada). */
+export async function runE2ECommand(
+  taskIdArg: string | undefined,
+  opts: VerifyFlags,
+  env: AppEnv,
+): Promise<void> {
       const cwd = opts.dir ? path.resolve(opts.dir) : env.cwd;
       const local = LocalContextLoader.load(cwd);
       const memory = new TaskMemory(cwd);
@@ -107,7 +133,6 @@ export function registerVerifyCommand(program: Command, env: AppEnv): void {
         process.exitCode = 1;
         if (opts.json) console.log(JSON.stringify({ ok: false, taskId, runId, error: message }, null, 2));
       }
-    });
 }
 
 interface RunReadinessArgs {
