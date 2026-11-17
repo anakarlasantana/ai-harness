@@ -28,9 +28,9 @@ ausente do CLI).
 | Comando | O que faz | Efeito | Status |
 | :--- | :--- | :--- | :--- |
 | `ai spec list` | lista as specs do alvo (id, estado, CAs) | leitura | implementado |
-| `ai spec new` | abre rascunho de spec | `spec/<ID>/requisito.md` | planejado (fase C) |
-| `ai spec review` | laudo de lacunas do requisito (DoR) | relatório | planejado (fase C) |
-| `ai spec approve` | **pausa** e registra a aprovação (identidade + `criterios_sha`) | frontmatter | planejado (fase C) |
+| `ai spec new` | abre rascunho de spec | `spec/<ID>/requisito.md` | implementado |
+| `ai spec review` | laudo de lacunas do requisito (DoR) | relatório | implementado |
+| `ai spec approve` | **pausa** e registra a aprovação (identidade + `criterios_sha`) | frontmatter | implementado |
 | `ai plan create` | gera `desenho.md` + `tarefas.md` (waves) | artefatos | planejado (fase D) |
 | `ai plan approve` | aprova o plano (só quando há risco) | frontmatter | planejado (fase D) |
 | `ai plan list` | lista tarefas e waves | leitura | planejado (fase D) |

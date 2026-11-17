@@ -16,8 +16,9 @@
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:cli": "node scripts/check-cli.mjs",
-    "check": "npm run build && npm run typecheck && npm run check:cli",
-    "clean": "rm -rf dist"
+    "check": "npm run build && npm run typecheck && npm run check:cli && npm run check:spec",
+    "clean": "rm -rf dist",
+    "check:spec": "node scripts/check-spec.mjs"
   },
   "files": [
     "dist",

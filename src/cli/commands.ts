@@ -33,6 +33,7 @@ import type { LLMProvider } from '../providers/LLMProvider.js';
 import { startDashboard } from './dashboard.js';
 import { registerFixCommand } from './fix-command.js';
 import { registerE2ECommand, runE2ECommand } from './verify-command.js';
+import { registerSpecCommand } from './spec-command.js';
 
 export interface CommonFlags {
   provider?: ProviderKind;
@@ -261,35 +262,6 @@ function outputResult(flags: CommonFlags, text: string, meta: Record<string, unk
   );
 }
 
-/** Specs do alvo: `spec/<ID>-<slug>/requisito.md` com frontmatter YAML. */
-function listSpecs(cwd: string): { id: string; estado: string; slug: string }[] {
-  const dir = path.join(cwd, 'spec');
-  let entries: fs.Dirent[] = [];
-
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const out: { id: string; estado: string; slug: string }[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const fp = path.join(dir, entry.name, 'requisito.md');
-    if (!fs.existsSync(fp)) continue;
-
-    const front = /^---\n([\s\S]*?)\n---/.exec(fs.readFileSync(fp, 'utf8'))?.[1] ?? '';
-    const id = /^id:\s*(.+)$/m.exec(front)?.[1]?.trim().replace(/^["']|["']$/g, '') ?? entry.name;
-    const estado =
-      /^estado:\s*(.+)$/m.exec(front)?.[1]?.trim().replace(/^["']|["']$/g, '') ?? 'rascunho';
-
-    out.push({ id, estado, slug: entry.name });
-  }
-
-  return out.sort((a, b) => a.id.localeCompare(b.id));
-}
-
 export function registerCommands(program: Command, env: AppEnv): void {
   const addCommon = (cmd: Command): Command =>
     cmd
@@ -449,23 +421,6 @@ export function registerCommands(program: Command, env: AppEnv): void {
       });
     };
 
-  const hSpecList = async (opts: { json?: boolean; dir?: string }): Promise<void> => {
-    const cwd = opts.dir ? path.resolve(opts.dir) : env.cwd;
-    const specs = listSpecs(cwd);
-
-    if (opts.json) {
-      console.log(JSON.stringify({ specs }, null, 2));
-      return;
-    }
-
-    if (specs.length === 0) {
-      console.log('Nenhuma spec em spec/. Crie com `ai spec new` (fase C).');
-      return;
-    }
-
-    for (const s of specs) console.log(`${s.id.padEnd(10)} ${s.estado.padEnd(12)} ${s.slug}`);
-  };
-
   const hIndex = (opts: { check?: boolean; json?: boolean; print?: boolean }): void => {
     if (opts.check) {
       const stale = RepoIndex.isStale(env.cwd);
@@ -519,13 +474,7 @@ export function registerCommands(program: Command, env: AppEnv): void {
 
   // ── Superfície: spec · plan · build · verify · fix · ops ────────────────────
 
-  const spec = program.command('spec').description('Levantamento: requisitos, critérios e aprovação');
-  spec
-    .command('list')
-    .description('Lista as specs do alvo (id, estado, pasta)')
-    .option('--json', 'saída em JSON')
-    .option('--dir <path>', 'diretório do repositório (default: cwd)')
-    .action(hSpecList);
+  registerSpecCommand(program, env);
 
   const build = program
     .command('build')

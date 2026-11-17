@@ -8,6 +8,7 @@ import { execSafe } from '../engine/CommandRunner.js';
 import { detectStack } from '../engine/StackDetector.js';
 import { buildDossie } from '../engine/rework/Dossie.js';
 import { escopoDe, violacoes } from '../engine/rework/Escopo.js';
+import { slugify } from '../spec/SpecRecord.js';
 import {
   ReworkRecordFile,
   listRecords,
@@ -297,12 +298,3 @@ async function changedFiles(cwd: string, ignorar: string[] = []): Promise<string
     .filter((c) => !ignorar.some((dir) => dir.length > 0 && c.startsWith(`${dir}/`)));
 }
 
-function slugify(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
-}

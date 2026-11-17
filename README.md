@@ -17,7 +17,7 @@ npm link          # expõe o binário global "ai"
 ## Uso (na raiz do SEU repositório)
 
 ```bash
-ai spec   list                 # specs do alvo (id, estado)   [new/review/approve: fase C]
+ai spec   new|review|approve|list   # levantar e aprovar a spec (gate humano)
 ai plan   create <specId>      # desenho + tarefas (waves)     [fase D]
 ai build  code <taskId> "<instrução>"   # implementação (developer + TDD)
 ai build  review|simplify|ship|design|webperf|debug <taskId>
@@ -91,8 +91,9 @@ Precedência do endpoint: `HARNESS_BASE_URL`/`HARNESS_API_KEY`/`HARNESS_MODEL` >
 
 Fluxo projetado: não há nada específico de uma aplicação no harness. O que muda por
 app é o **contexto** que ele publica (`.harness/`) — contrato em
-[docs/verificacao-e-testes.md](docs/verificacao-e-testes.md) e, para a correção,
-[docs/fluxo-de-rework.md](docs/fluxo-de-rework.md).
+[docs/verificacao-e-testes.md](docs/verificacao-e-testes.md), a esteira de
+requisitos em [docs/esteira-de-requisitos.md](docs/esteira-de-requisitos.md) e a
+correção em [docs/fluxo-de-rework.md](docs/fluxo-de-rework.md).
 
 ## Pasta de Contexto Local (`.harness/`)
 
