@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# pre-commit do ai-harness: build + typecheck + paridade CLI x glossario.
+# Instale com: git config core.hooksPath .githooks
+set -euo pipefail
+
+if ! npm run --silent check; then
+  echo "" >&2
+  echo "  commit bloqueado: \`npm run check\` falhou (build, tipos ou CLI x glossario)." >&2
+  exit 1
+fi

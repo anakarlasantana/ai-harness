@@ -37,6 +37,21 @@ Flags comuns: `--provider kiro|openai|claude` · `--templates <path>` ·
 
 Diagnóstico: `ai ops doctor [--probe]` · `ai ops models`.
 
+## Qualidade do proprio harness
+
+```bash
+npm run check   # build + typecheck + paridade CLI x docs/glossario.md
+```
+
+O hook de commit roda o mesmo comando. Instale uma vez:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+A superficie do CLI e' a de [docs/glossario.md](docs/glossario.md) — comando
+visivel que nao esteja la (ou o contrario) reprova o check.
+
 ## Provedores
 
 O harness separa **wire format** (como falar) de **endpoint** (com quem falar).
