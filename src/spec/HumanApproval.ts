@@ -1,17 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import readline from 'node:readline/promises';
-import { anexarHistorico, gravarSpec, type SpecRecord } from './SpecRecord.js';
+import { appendHistory, writeSpecDocument, type SpecDocument } from './SpecDocument.js';
 
 /**
- * O gate humano: identidade automática + guardas + a decisão.
+ * O gate humano: identity automática + guardas + a decisão.
  *
  * Regra: a aprovação é **do humano no terminal**. O agente não assina — e a
  * única prova disso que não depende de confiança é o ambiente (TTY + ausência
  * de marca de agente/CI). O `aprovado_sha` garante que o critério aprovado é o
  * critério usado depois.
  */
-export interface Identidade {
+export interface Identity {
   por: string;
   conta: string | null;
   usuarioOs: string;
@@ -19,9 +19,9 @@ export interface Identidade {
   origem: 'git-config' | 'declarado';
 }
 
-export type Decisao = 'a' | 'e' | 'r' | 's';
+export type ApprovalDecision = 'a' | 'e' | 'r' | 's';
 
-export interface Guardas {
+export interface EnvironmentGuardResult {
   ok: boolean;
   motivos: string[];
 }
@@ -35,10 +35,10 @@ const MARCAS_DE_AGENTE = [
   'CI',
 ];
 
-export function guardasDoAmbiente(opts: {
+export function environmentGuards(opts: {
   isTTY?: boolean;
   env?: NodeJS.ProcessEnv;
-} = {}): Guardas {
+} = {}): EnvironmentGuardResult {
   const isTTY = opts.isTTY ?? Boolean(process.stdin.isTTY);
   const env = opts.env ?? process.env;
   const motivos: string[] = [];
@@ -54,7 +54,7 @@ export function guardasDoAmbiente(opts: {
   return { ok: motivos.length === 0, motivos };
 }
 
-export function identidade(cwd: string, declarado?: string): Identidade {
+export function identity(cwd: string, declarado?: string): Identity {
   const usuarioOs = os.userInfo().username;
   const host = os.hostname();
 
@@ -89,7 +89,7 @@ function gitConfig(cwd: string, chave: string): string | null {
 }
 
 /** Pergunta a decisão (uma tecla) e, se for rejeitar, o motivo. */
-export async function perguntarDecisao(): Promise<{ decisao: Decisao; motivo?: string }> {
+export async function askDecision(): Promise<{ decisao: ApprovalDecision; motivo?: string }> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   try {
@@ -108,10 +108,10 @@ export async function perguntarDecisao(): Promise<{ decisao: Decisao; motivo?: s
   }
 }
 
-export function aplicarAprovacao(
-  spec: SpecRecord,
+export function applyApproval(
+  spec: SpecDocument,
   opts: {
-    identidade: Identidade;
+    identity: Identity;
     avisos: string[];
     quando?: string;
     /** `true` só quando a aprovação veio de um terminal humano. */
@@ -121,37 +121,37 @@ export function aplicarAprovacao(
   const quando = opts.quando ?? new Date().toISOString();
 
   spec.front.estado = 'aprovado';
-  spec.front.aprovado_por = opts.identidade.por;
-  spec.front.aprovado_conta = opts.identidade.conta ?? '';
+  spec.front.aprovado_por = opts.identity.por;
+  spec.front.aprovado_conta = opts.identity.conta ?? '';
   spec.front.aprovado_em = quando;
   spec.front.aprovado_sha = spec.sha;
   spec.front.avisos_aceitos = opts.avisos.join(' | ');
   spec.front.aprovado_terminal = opts.terminal ? 'true' : 'false';
-  spec.front.aprovado_origem = opts.identidade.origem;
+  spec.front.aprovado_origem = opts.identity.origem;
 
-  gravarSpec(spec);
-  anexarHistorico(
+  writeSpecDocument(spec);
+  appendHistory(
     spec,
-    `- ${quando} — aprovado por ${opts.identidade.por} <${opts.identidade.conta ?? 'sem conta'}> ` +
-      `(${opts.identidade.host}, origem ${opts.identidade.origem}); sha ${spec.sha.slice(0, 12)}` +
+    `- ${quando} — aprovado por ${opts.identity.por} <${opts.identity.conta ?? 'sem conta'}> ` +
+      `(${opts.identity.host}, origem ${opts.identity.origem}); sha ${spec.sha.slice(0, 12)}` +
       (opts.avisos.length ? `; avisos aceitos: ${opts.avisos.length}` : ''),
   );
 }
 
-export function aplicarRejeicao(
-  spec: SpecRecord,
-  opts: { identidade: Identidade; motivo?: string; quando?: string },
+export function applyRejection(
+  spec: SpecDocument,
+  opts: { identity: Identity; motivo?: string; quando?: string },
 ): void {
   const quando = opts.quando ?? new Date().toISOString();
 
   spec.front.estado = 'rejeitado';
-  spec.front.rejeitado_por = opts.identidade.por;
+  spec.front.rejeitado_por = opts.identity.por;
   spec.front.rejeitado_em = quando;
   spec.front.motivo_rejeicao = opts.motivo ?? '';
 
-  gravarSpec(spec);
-  anexarHistorico(
+  writeSpecDocument(spec);
+  appendHistory(
     spec,
-    `- ${quando} — rejeitado por ${opts.identidade.por}${opts.motivo ? `: ${opts.motivo}` : ''}`,
+    `- ${quando} — rejeitado por ${opts.identity.por}${opts.motivo ? `: ${opts.motivo}` : ''}`,
   );
 }

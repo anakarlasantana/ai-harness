@@ -1,6 +1,6 @@
 import { log } from '../core/logger.js';
-import type { Task } from '../core/Task.js';
-import { TaskMemory } from '../memory/TaskMemory.js';
+import type { ExecutionRecord } from '../core/ExecutionRecord.js';
+import { ExecutionMemory } from '../memory/ExecutionMemory.js';
 import type { LLMProvider } from '../providers/LLMProvider.js';
 import { execSafe, type CommandResult } from './CommandRunner.js';
 import type { Orchestrator } from './Orchestrator.js';
@@ -19,8 +19,8 @@ export interface QALoopOptions {
   cwd: string;
   provider: LLMProvider;
   orchestrator: Orchestrator;
-  taskMemory: TaskMemory;
-  task: Task;
+  taskMemory: ExecutionMemory;
+  task: ExecutionRecord;
   stack: StackInfo;
   systemPrompt: string;
   maxAttempts?: number;

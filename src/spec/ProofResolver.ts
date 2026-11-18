@@ -8,14 +8,14 @@ import path from 'node:path';
  * É a mesma regra do `gen-rastreio.mjs` do alvo — por isso ela mora num lugar só
  * aqui também: DoR, `verify proofs` e o futuro rastreio não podem divergir.
  */
-export interface ProvaResolvida {
+export interface ResolvedProof {
   tipo: string | null;
   alvo: string | null;
   resolvido: boolean;
   motivo: string | null;
 }
 
-export function resolverProva(prova: string | null, cwd: string): ProvaResolvida {
+export function resolveProof(prova: string | null, cwd: string): ResolvedProof {
   if (!prova) return { tipo: null, alvo: null, resolvido: false, motivo: 'sem prova declarada' };
 
   const [tipo, alvo] = prova.split(':');
@@ -52,7 +52,7 @@ export function resolverProva(prova: string | null, cwd: string): ProvaResolvida
 }
 
 /** Quantos `test.step(...)` a jornada tem — o tamanho da história. */
-export function contarPassos(cwd: string, nome: string): number {
+export function countJourneySteps(cwd: string, nome: string): number {
   const arquivo = path.join(cwd, 'e2e', 'jornadas', `${nome}.spec.ts`);
 
   try {

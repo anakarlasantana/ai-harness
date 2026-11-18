@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { lerPlano, avaliarRisco } from './Tasks.js';
-import { lerSpec, type SpecRecord } from './SpecRecord.js';
+import { parseTaskPlan, evaluatePlanRisk } from './TaskPlan.js';
+import { readSpecDocument, type SpecDocument } from './SpecDocument.js';
 
 /**
  * O que precisa estar aprovado para o código começar.
@@ -10,13 +10,13 @@ import { lerSpec, type SpecRecord } from './SpecRecord.js';
  * casa com os critérios de hoje. G2 é exigido pela regra do risco (>3 tarefas,
  * `packages/contrato`, migration) e tem de estar registrado.
  */
-export interface GateResultado {
+export interface CodeGateResult {
   ok: boolean;
   motivos: string[];
-  spec?: SpecRecord;
+  spec?: SpecDocument;
 }
 
-export function avaliarGates(cwd: string, specId: string): GateResultado {
+export function checkCodeGates(cwd: string, specId: string): CodeGateResult {
   const motivos: string[] = [];
   const dir = path.join(cwd, 'spec');
 
@@ -34,10 +34,10 @@ export function avaliarGates(cwd: string, specId: string): GateResultado {
     return { ok: false, motivos: [`spec ${specId} não encontrada (${pastas.join(', ') || 'nenhuma'})`] };
   }
 
-  const spec = lerSpec(path.join(dir, pasta));
+  const spec = readSpecDocument(path.join(dir, pasta));
 
   if (spec.front.estado !== 'aprovado') {
-    motivos.push(`G1: estado "${spec.front.estado ?? 'rascunho'}" — rode \`ai spec approve ${specId}\``);
+    motivos.push(`G1: estado "${spec.front.estado ?? 'skeleton'}" — rode \`ai spec approve ${specId}\``);
   }
 
   if (spec.front.aprovado_sha && spec.front.aprovado_sha !== spec.sha) {
@@ -50,8 +50,8 @@ export function avaliarGates(cwd: string, specId: string): GateResultado {
     motivos.push('G1: sem aprovação registrada (aprovado_sha ausente)');
   }
 
-  const plano = lerPlano(path.join(dir, pasta));
-  const risco = avaliarRisco(plano);
+  const plano = parseTaskPlan(path.join(dir, pasta));
+  const risco = evaluatePlanRisk(plano);
 
   if (risco.exige && !spec.front.plano_aprovado_por) {
     motivos.push(`G2: exigido (${risco.motivos.join('; ')}) — rode \`ai plan approve ${specId}\``);

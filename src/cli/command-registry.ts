@@ -14,12 +14,12 @@ import {
 import { REPO_MAP_TOOL, RepoIndex, filterMapByArea } from '../context/RepoIndex.js';
 import { STAGE_CONFIG, type StageName } from '../context/stages.js';
 import { log } from '../core/logger.js';
-import type { Task } from '../core/Task.js';
-import { createTask } from '../core/Task.js';
+import type { ExecutionRecord } from '../core/ExecutionRecord.js';
+import { createExecutionRecord } from '../core/ExecutionRecord.js';
 import { detectStack } from '../engine/StackDetector.js';
 import { Orchestrator, extractFilesFromText } from '../engine/Orchestrator.js';
 import { QALoop } from '../engine/QALoop.js';
-import { TaskMemory } from '../memory/TaskMemory.js';
+import { ExecutionMemory } from '../memory/ExecutionMemory.js';
 import { McpRegistry } from '../mcp/McpRegistry.js';
 import { McpManager } from '../mcp/McpManager.js';
 import { createProvider } from '../providers/ProviderFactory.js';
@@ -30,13 +30,13 @@ import {
   reportModelsProbe,
 } from '../providers/diagnostics.js';
 import type { LLMProvider } from '../providers/LLMProvider.js';
-import { startDashboard } from './dashboard.js';
-import { registerFixCommand } from './fix-command.js';
-import { registerProofsCommand } from './proofs-command.js';
-import { registerApiCommand, registerE2ECommand, runE2ECommand } from './verify-command.js';
-import { registerPlanCommand } from './plan-command.js';
-import { avaliarGates } from '../spec/Gates.js';
-import { registerSpecCommand } from './spec-command.js';
+import { startDashboard } from './dashboard-server.js';
+import { registerFixCommand } from './fix-commands.js';
+import { registerProofsCommand } from './verify-proofs-commands.js';
+import { registerApiCommand, registerE2ECommand, runE2ECommand } from './verify-commands.js';
+import { registerPlanCommand } from './plan-commands.js';
+import { checkCodeGates } from '../spec/CodeGateCheck.js';
+import { registerSpecCommand } from './spec-commands.js';
 
 export interface CommonFlags {
   provider?: ProviderKind;
@@ -52,7 +52,7 @@ export interface CommonFlags {
 interface Session {
   env: AppEnv;
   local: ReturnType<typeof LocalContextLoader.load>;
-  memory: TaskMemory;
+  memory: ExecutionMemory;
   assembler: ContextAssembler;
   provider: LLMProvider;
   registry: McpRegistry;
@@ -71,7 +71,7 @@ function buildSession(env: AppEnv, flags: CommonFlags, stage: StageName): Sessio
         : resolveStageProvider(stage, local.config, env),
   });
   const assembler = new ContextAssembler({ templatesPath: flags.templates, local });
-  const memory = new TaskMemory(env.cwd);
+  const memory = new ExecutionMemory(env.cwd);
   const registry = McpRegistry.load({
     cwd: env.cwd,
     fromKiro: flags.mcpFromKiro,
@@ -133,7 +133,7 @@ function stageUsesTools(_stage: StageName): boolean {
   return true;
 }
 
-function statusForStage(stage: StageName, hitCap: boolean): Task['status'] {
+function statusForStage(stage: StageName, hitCap: boolean): ExecutionRecord['status'] {
   if (hitCap) return 'error';
   switch (stage) {
     case 'plan':
@@ -160,7 +160,7 @@ interface RunStageArgs {
   stage: StageName;
   taskId: string;
   userText: string;
-  ensureTask: () => Promise<Task>;
+  ensureTask: () => Promise<ExecutionRecord>;
 }
 
 async function runStage(args: RunStageArgs): Promise<void> {
@@ -168,9 +168,9 @@ async function runStage(args: RunStageArgs): Promise<void> {
   const session = buildSession(env, flags, stage);
 
   // In dry-run we don't need a persisted task; fall back to a synthetic one.
-  let task: Task;
+  let task: ExecutionRecord;
   if (flags.dryRun) {
-    task = (await args.ensureTask().catch(() => null)) ?? createTask(taskId, userText);
+    task = (await args.ensureTask().catch(() => null)) ?? createExecutionRecord(taskId, userText);
   } else {
     task = await args.ensureTask();
   }
@@ -292,7 +292,7 @@ export function registerCommands(program: Command, env: AppEnv): void {
   // para o mesmo trabalho.
 
   const hPlan = async (taskId: string, requisito: string, opts: CommonFlags): Promise<void> => {
-    const memory = new TaskMemory(env.cwd);
+    const memory = new ExecutionMemory(env.cwd);
     await runStage({
       env,
       flags: opts,
@@ -311,12 +311,12 @@ export function registerCommands(program: Command, env: AppEnv): void {
     instrucao: string,
     opts: CommonFlags & { spec?: string; semSpec?: boolean },
   ): Promise<void> => {
-    const memory = new TaskMemory(env.cwd);
+    const memory = new ExecutionMemory(env.cwd);
 
     // O código não começa sem spec aprovada (G1) — e sem G2 quando o plano tem
     // risco. `--sem-spec` existe para manutenção declarada, e fica registrado.
     if (opts.spec) {
-      const gates = avaliarGates(env.cwd, opts.spec);
+      const gates = checkCodeGates(env.cwd, opts.spec);
 
       if (!gates.ok) {
         for (const motivo of gates.motivos) log.err(motivo);
@@ -347,7 +347,7 @@ export function registerCommands(program: Command, env: AppEnv): void {
   };
 
   const hRework = async (taskId: string, feedback: string, opts: CommonFlags): Promise<void> => {
-    const memory = new TaskMemory(env.cwd);
+    const memory = new ExecutionMemory(env.cwd);
     await memory.appendQaFeedback(taskId, `Rework solicitado: ${feedback}`);
     await runStage({
       env,
@@ -360,7 +360,7 @@ export function registerCommands(program: Command, env: AppEnv): void {
   };
 
   const hSync = async (taskId: string, opts: CommonFlags): Promise<void> => {
-    const memory = new TaskMemory(env.cwd);
+    const memory = new ExecutionMemory(env.cwd);
     await runStage({
       env,
       flags: opts,
@@ -436,7 +436,7 @@ export function registerCommands(program: Command, env: AppEnv): void {
       const opts = params[params.length - 2] as CommonFlags;
       const taskId = params[0] as string;
       const text = textArgName ? (params[1] as string) : defaultText;
-      const memory = new TaskMemory(env.cwd);
+      const memory = new ExecutionMemory(env.cwd);
       await runStage({
         env,
         flags: opts,

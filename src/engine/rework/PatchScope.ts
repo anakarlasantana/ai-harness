@@ -16,7 +16,7 @@ export interface Escopo {
 }
 
 /** Nunca editável por um agente, em nenhuma classificação. */
-const SAGRADOS: RegExp[] = [
+const ALWAYS_FORBIDDEN: RegExp[] = [
   /^AGENTS\.md$/,
   /^\.clinerules\//,
   /^\.harness\/context\.json$/,
@@ -24,7 +24,7 @@ const SAGRADOS: RegExp[] = [
 
 const TESTE: RegExp[] = [/^e2e\//, /(^|\/)__tests__\//, /\.spec\.[jt]sx?$/, /\.test\.[jt]sx?$/];
 
-export function escopoDe(classificacao: ReworkClass): Escopo {
+export function patchScopeFor(classificacao: ReworkClass): Escopo {
   switch (classificacao) {
     case 'teste':
       return { descricao: 'só o instrumento (e2e/**, __tests__/**, *.spec, *.test)', permite: TESTE };
@@ -39,11 +39,11 @@ export function escopoDe(classificacao: ReworkClass): Escopo {
 }
 
 /** Arquivos que violam o escopo (vazio = patch dentro da fronteira). */
-export function violacoes(classificacao: ReworkClass, arquivos: string[]): string[] {
-  const escopo = escopoDe(classificacao);
+export function findScopeViolations(classificacao: ReworkClass, arquivos: string[]): string[] {
+  const escopo = patchScopeFor(classificacao);
 
   return arquivos.filter((arquivo) => {
-    if (SAGRADOS.some((r) => r.test(arquivo))) return true;
+    if (ALWAYS_FORBIDDEN.some((r) => r.test(arquivo))) return true;
     return !escopo.permite.some((r) => r.test(arquivo));
   });
 }

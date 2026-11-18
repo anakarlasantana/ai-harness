@@ -3,8 +3,8 @@ import type { Command } from 'commander';
 import type { AppEnv } from '../config/env.js';
 import { LocalContextLoader } from '../context/LocalContextLoader.js';
 import { log } from '../core/logger.js';
-import { contarPassos, resolverProva } from '../spec/Prova.js';
-import { acharSpec, listarSpecs } from '../spec/SpecRecord.js';
+import { countJourneySteps, resolveProof } from '../spec/ProofResolver.js';
+import { findSpec, listSpecs } from '../spec/SpecDocument.js';
 
 /**
  * `ai verify proofs` — o rastreio visto de fora: cada `CA-n` tem prova válida?
@@ -29,16 +29,16 @@ export function registerProofsCommand(parent: Command, env: AppEnv): void {
       const local = LocalContextLoader.load(cwd);
       const declaradas = local.config.e2e?.journey ?? {};
 
-      const specs = listarSpecs(cwd).map((s) => {
-        const spec = acharSpec(cwd, s.id);
+      const specs = listSpecs(cwd).map((s) => {
+        const spec = findSpec(cwd, s.id);
 
         return {
           id: s.id,
-          estado: spec.front.estado ?? 'rascunho',
+          estado: spec.front.estado ?? 'skeleton',
           criterios: spec.criterios.map((ca) => ({
             ca: ca.id,
             prova: ca.prova,
-            ...resolverProva(ca.prova, cwd),
+            ...resolveProof(ca.prova, cwd),
           })),
         };
       });
@@ -56,8 +56,8 @@ export function registerProofsCommand(parent: Command, env: AppEnv): void {
       const jornadas = Object.entries(declaradas).map(([nome, comando]) => ({
         nome,
         comando,
-        passos: contarPassos(cwd, nome),
-        existe: contarPassos(cwd, nome) > 0,
+        passos: countJourneySteps(cwd, nome),
+        existe: countJourneySteps(cwd, nome) > 0,
         coberta: usadas.get(nome) ?? [],
       }));
 

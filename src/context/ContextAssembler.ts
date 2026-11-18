@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { log } from '../core/logger.js';
-import type { Task } from '../core/Task.js';
+import type { ExecutionRecord } from '../core/ExecutionRecord.js';
 import type { LocalContext } from './LocalContextLoader.js';
 import {
   STAGE_CONFIG,
@@ -41,7 +41,7 @@ export class ContextAssembler {
   /** Build the full system prompt for a stage (and optional task). */
   buildSystemPrompt(
     stage: StageName,
-    task?: Task,
+    task?: ExecutionRecord,
     options: { hasTools?: boolean } = {},
   ): string {
     const base = this.stageBasePrompt(stage);

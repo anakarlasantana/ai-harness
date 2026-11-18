@@ -87,7 +87,7 @@ export function reworkDir(cwd: string, declared?: string): string {
 export class ReworkRecordFile {
   /**
    * Fila por arquivo: o registro é lido-modificado-escrito, e duas execuções do
-   * harness ao mesmo tempo (ex.: `--verificar` e um `fix` no editor) não podem
+   * harness ao mesmo tempo (ex.: `--runVerification` e um `fix` no editor) não podem
    * intercalar. Mesma disciplina da memória de task.
    */
   private static readonly filas = new Map<string, Promise<unknown>>();

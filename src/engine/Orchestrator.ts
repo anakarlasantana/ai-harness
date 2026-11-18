@@ -1,6 +1,6 @@
 import { log } from '../core/logger.js';
-import type { ExecutionTraceEntry, Task } from '../core/Task.js';
-import { TaskMemory } from '../memory/TaskMemory.js';
+import type { ExecutionTraceEntry, ExecutionRecord } from '../core/ExecutionRecord.js';
+import { ExecutionMemory } from '../memory/ExecutionMemory.js';
 import { McpManager } from '../mcp/McpManager.js';
 import type { McpRegistry } from '../mcp/McpRegistry.js';
 import type {
@@ -34,8 +34,8 @@ export interface RunOptions {
   userTask: string;
   persona: string;
   stage: StageName;
-  taskMemory: TaskMemory;
-  task: Task;
+  taskMemory: ExecutionMemory;
+  task: ExecutionRecord;
   mcp: McpManager;
   registry: McpRegistry;
   maxIterations?: number;

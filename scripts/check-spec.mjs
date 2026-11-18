@@ -13,9 +13,9 @@ import { fileURLToPath } from 'node:url';
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = (nome) => import(path.join(RAIZ, 'dist', 'spec', nome));
 
-const { lerSpec, shaDosCriterios } = await dist('SpecRecord.js');
-const { avaliarDor } = await dist('Dor.js');
-const { aplicarAprovacao, guardasDoAmbiente, identidade, aplicarRejeicao } = await dist('Gate.js');
+const { readSpecDocument, criteriaSha } = await dist('SpecDocument.js');
+const { evaluateSpecReadiness } = await dist('SpecReadiness.js');
+const { applyApproval, environmentGuards, identity, applyRejection } = await dist('HumanApproval.js');
 
 const falhas = [];
 const ok = (nome, condicao, detalhe = '') => {
@@ -40,7 +40,7 @@ const requisito = (cas) => `---
 id: FEAT-001
 titulo: Feature de teste
 persona: cliente
-estado: rascunho
+estado: skeleton
 ---
 
 ## História
@@ -60,7 +60,7 @@ const valida = requisito(
   [
     '- **CA-1** — When o checkout abre, the sistema shall exibir as opções.',
     '  prova: `unit:backend/src/x/__tests__/x.spec.ts`',
-    '- **CA-2** — When a pessoa confirma, the sistema shall registrar o pedido.',
+    '- **CA-2** — When a pessoa confirma, the sistema shall recordApproval o pedido.',
     '  prova: `jornada:cliente@passo um`',
   ].join('\n'),
 );
@@ -68,16 +68,16 @@ const valida = requisito(
 const arquivo = path.join(pasta, 'requisito.md');
 writeFileSync(arquivo, valida);
 
-const spec = lerSpec(pasta);
+const spec = readSpecDocument(pasta);
 ok('lê 2 critérios', spec.criterios.length === 2, `veio ${spec.criterios.length}`);
-ok('sha igual ao normalizado', spec.sha === shaDosCriterios(spec.criterios));
-ok('sha é determinístico', shaDosCriterios(spec.criterios) === shaDosCriterios([...spec.criterios]));
+ok('sha igual ao normalizado', spec.sha === criteriaSha(spec.criterios));
+ok('sha é determinístico', criteriaSha(spec.criterios) === criteriaSha([...spec.criterios]));
 
-const dor = avaliarDor(spec, alvo);
+const dor = evaluateSpecReadiness(spec, alvo);
 ok('DoR: spec válida não bloqueia', dor.bloqueios.length === 0, dor.bloqueios.join(' | '));
 
-const semProva = lerSpec(writeFixture('sem-prova', requisito('- **CA-1** — algo sem prova.')));
-ok('DoR: CA sem prova bloqueia', avaliarDor(semProva, alvo).bloqueios.some((b) => b.includes('sem `prova:`')));
+const semProva = readSpecDocument(writeFixture('sem-prova', requisito('- **CA-1** — algo sem prova.')));
+ok('DoR: CA sem prova bloqueia', evaluateSpecReadiness(semProva, alvo).bloqueios.some((b) => b.includes('sem `prova:`')));
 
 const provaQuebrada = writeFixture(
   'prova-quebrada',
@@ -87,7 +87,7 @@ const provaQuebrada = writeFixture(
 );
 ok(
   'DoR: prova ausente bloqueia',
-  avaliarDor(lerSpec(provaQuebrada), alvo).bloqueios.some((b) => b.includes('arquivo ausente')),
+  evaluateSpecReadiness(readSpecDocument(provaQuebrada), alvo).bloqueios.some((b) => b.includes('arquivo ausente')),
 );
 
 const onze = writeFixture(
@@ -96,35 +96,35 @@ const onze = writeFixture(
     Array.from({ length: 11 }, (_, i) => `- **CA-${i + 1}** — c${i}.`).join('\n'),
   ),
 );
-ok('DoR: teto de 10 critérios', avaliarDor(lerSpec(onze), alvo).bloqueios.some((b) => b.includes('teto')));
+ok('DoR: teto de 10 critérios', evaluateSpecReadiness(readSpecDocument(onze), alvo).bloqueios.some((b) => b.includes('teto')));
 
-const guardaAgente = guardasDoAmbiente({ isTTY: false, env: {} });
+const guardaAgente = environmentGuards({ isTTY: false, env: {} });
 ok('guarda: sem TTY recusa', !guardaAgente.ok);
 
-const guardaHumano = guardasDoAmbiente({ isTTY: true, env: {} });
+const guardaHumano = environmentGuards({ isTTY: true, env: {} });
 ok('guarda: TTY humano passa', guardaHumano.ok);
 
-const guardaCI = guardasDoAmbiente({ isTTY: true, env: { CI: '1' } });
+const guardaCI = environmentGuards({ isTTY: true, env: { CI: '1' } });
 ok('guarda: CI recusa', !guardaCI.ok);
 
-const quem = identidade(alvo, 'Ana Karla Santana <t-ana.santana@cni.com.br>');
+const quem = identity(alvo, 'Ana Karla Santana <t-ana.santana@cni.com.br>');
 ok('identidade declarada', quem.conta === 't-ana.santana@cni.com.br' && quem.origem === 'declarado');
 
-const aprovada = lerSpec(pasta);
-aplicarAprovacao(aprovada, { identidade: quem, avisos: [], quando: '2026-01-01T00:00:00Z', terminal: false });
-const lida = lerSpec(pasta);
+const aprovada = readSpecDocument(pasta);
+applyApproval(aprovada, { identity: quem, avisos: [], quando: '2026-01-01T00:00:00Z', terminal: false });
+const lida = readSpecDocument(pasta);
 ok('aprovação grava estado', lida.front.estado === 'aprovado');
 ok('aprovação grava sha', lida.front.aprovado_sha === lida.sha);
-ok('aprovação grava identidade', lida.front.aprovado_conta === 't-ana.santana@cni.com.br');
+ok('aprovação grava identity', lida.front.aprovado_conta === 't-ana.santana@cni.com.br');
 ok('aprovação --por não é terminal', lida.front.aprovado_terminal === 'false');
 ok('histórico anexado', /## Histórico/.test(readFileSync(arquivo, 'utf8')));
 
-aplicarRejeicao(lerSpec(pasta), { identidade: quem, motivo: 'faltou regra', quando: '2026-01-02T00:00:00Z' });
+applyRejection(readSpecDocument(pasta), { identity: quem, motivo: 'faltou regra', quando: '2026-01-02T00:00:00Z' });
 ok('rejeição grava motivo', /motivo_rejeicao: faltou regra/.test(readFileSync(arquivo, 'utf8')));
 
 rmSync(alvo, { recursive: true, force: true });
 
-const { avaliarGates } = await import(path.join(RAIZ, 'dist', 'spec', 'Gates.js'));
+const { checkCodeGates } = await import(path.join(RAIZ, 'dist', 'spec', 'CodeGateCheck.js'));
 
 const alvoGate = mkdtempSync(path.join(tmpdir(), 'harness-gates-'));
 const pastaGate = path.join(alvoGate, 'spec', 'FEAT-009-gate');
@@ -135,7 +135,7 @@ writeFileSync(path.join(alvoGate, 'backend', 'src', 'x', '__tests__', 'x.spec.ts
 const specGate = (extra) => `---
 id: FEAT-009
 titulo: Gate
-estado: rascunho
+estado: skeleton
 ${extra}
 ---
 
@@ -160,44 +160,44 @@ const tarefas = (n) =>
   ).join('\n') + '\n';
 
 writeFileSync(path.join(pastaGate, 'requisito.md'), specGate(''));
-ok('gate: rascunho bloqueia', !avaliarGates(alvoGate, 'FEAT-009').ok);
+ok('gate: skeleton bloqueia', !checkCodeGates(alvoGate, 'FEAT-009').ok);
 
 writeFileSync(
   path.join(pastaGate, 'requisito.md'),
-  specGate(`aprovado_por: Ana\naprovado_sha: ${lerSpec(pastaGate).sha}`).replace(
-    'estado: rascunho',
+  specGate(`aprovado_por: Ana\naprovado_sha: ${readSpecDocument(pastaGate).sha}`).replace(
+    'estado: skeleton',
     'estado: aprovado',
   ),
 );
 writeFileSync(path.join(pastaGate, 'tarefas.md'), tarefas(1));
-ok('gate: aprovado e plano sem risco passa', avaliarGates(alvoGate, 'FEAT-009').ok, avaliarGates(alvoGate, 'FEAT-009').motivos.join(' | '));
+ok('gate: aprovado e plano sem risco passa', checkCodeGates(alvoGate, 'FEAT-009').ok, checkCodeGates(alvoGate, 'FEAT-009').motivos.join(' | '));
 
-const antes = lerSpec(pastaGate);
+const antes = readSpecDocument(pastaGate);
 writeFileSync(
   path.join(pastaGate, 'requisito.md'),
   specGate(`aprovado_por: Ana\naprovado_sha: ${antes.sha}`)
-    .replace('estado: rascunho', 'estado: aprovado')
+    .replace('estado: skeleton', 'estado: aprovado')
     .replace('shall b', 'shall c'),
 );
 ok(
   'gate: critério mudado depois da aprovação bloqueia',
-  avaliarGates(alvoGate, 'FEAT-009').motivos.some((m) => m.includes('critérios mudaram')),
+  checkCodeGates(alvoGate, 'FEAT-009').motivos.some((m) => m.includes('critérios mudaram')),
 );
 
-const specOk = lerSpec(pastaGate);
+const specOk = readSpecDocument(pastaGate);
 writeFileSync(
   path.join(pastaGate, 'requisito.md'),
-  specGate(`aprovado_por: Ana\naprovado_sha: ${specOk.sha}`).replace('estado: rascunho', 'estado: aprovado'),
+  specGate(`aprovado_por: Ana\naprovado_sha: ${specOk.sha}`).replace('estado: skeleton', 'estado: aprovado'),
 );
 writeFileSync(path.join(pastaGate, 'tarefas.md'), tarefas(4));
 ok(
   'gate: G2 exigido sem aprovação de plano bloqueia',
-  avaliarGates(alvoGate, 'FEAT-009').motivos.some((m) => m.includes('G2')),
+  checkCodeGates(alvoGate, 'FEAT-009').motivos.some((m) => m.includes('G2')),
 );
 
 rmSync(alvoGate, { recursive: true, force: true });
 
-const { resolverProva, contarPassos } = await import(path.join(RAIZ, 'dist', 'spec', 'Prova.js'));
+const { resolveProof, countJourneySteps } = await import(path.join(RAIZ, 'dist', 'spec', 'ProofResolver.js'));
 const alvoProva = mkdtempSync(path.join(tmpdir(), 'harness-prova-'));
 mkdirSync(path.join(alvoProva, 'e2e', 'jornadas'), { recursive: true });
 mkdirSync(path.join(alvoProva, 'backend', 't'), { recursive: true });
@@ -207,13 +207,13 @@ writeFileSync(
   'test("x", async () => { await test.step("passo um", async () => {}) })',
 );
 
-ok('prova: unit existente resolve', resolverProva('unit:backend/t/t.spec.ts', alvoProva).resolvido);
-ok('prova: unit ausente falha', !resolverProva('unit:backend/t/nao.spec.ts', alvoProva).resolvido);
-ok('prova: jornada com passo resolve', resolverProva('jornada:cliente@passo um', alvoProva).resolvido);
-ok('prova: jornada com passo errado falha', !resolverProva('jornada:cliente@outro', alvoProva).resolvido);
-ok('prova: jornada inexistente falha', !resolverProva('jornada:fantasma', alvoProva).resolvido);
-ok('prova: api ainda não resolve', !resolverProva('api:qualquer', alvoProva).resolvido);
-ok('prova: conta passos da jornada', contarPassos(alvoProva, 'cliente') === 1);
+ok('prova: unit existente resolve', resolveProof('unit:backend/t/t.spec.ts', alvoProva).resolvido);
+ok('prova: unit ausente falha', !resolveProof('unit:backend/t/nao.spec.ts', alvoProva).resolvido);
+ok('prova: jornada com passo resolve', resolveProof('jornada:cliente@passo um', alvoProva).resolvido);
+ok('prova: jornada com passo errado falha', !resolveProof('jornada:cliente@outro', alvoProva).resolvido);
+ok('prova: jornada inexistente falha', !resolveProof('jornada:fantasma', alvoProva).resolvido);
+ok('prova: api ainda não resolve', !resolveProof('api:qualquer', alvoProva).resolvido);
+ok('prova: conta passos da jornada', countJourneySteps(alvoProva, 'cliente') === 1);
 
 rmSync(alvoProva, { recursive: true, force: true });
 

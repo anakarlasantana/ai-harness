@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { SpecCriterio } from './SpecRecord.js';
+import type { SpecCriterion } from './SpecDocument.js';
 
 /**
- * Plano de execução: `tarefas.md` da spec.
+ * TaskPlanModel de execução: `tarefas.md` da spec.
  *
  * Gramática de uma linha (o que `ai plan create` escreve e o que `plan verify`
  * confere):
@@ -12,7 +12,7 @@ import type { SpecCriterio } from './SpecRecord.js';
  *   - **T-1** · escopo: `backend/x/**` · fronteira: produto · cobre: CA-1, CA-2 · wave: 1
  *   - **T-3** · escopo: `e2e/**` · fronteira: teste · cobre: CA-2 · wave: 2 (depende T-1)
  */
-export interface Tarefa {
+export interface PlanTask {
   id: string;
   escopo: string[];
   fronteira: 'produto' | 'teste' | '?';
@@ -21,9 +21,9 @@ export interface Tarefa {
   depende: string[];
 }
 
-export interface Plano {
+export interface TaskPlanModel {
   arquivo: string;
-  tarefas: Tarefa[];
+  tarefas: PlanTask[];
   /** Hash do arquivo — é o que a aprovação do plano assina. */
   sha: string;
   existe: boolean;
@@ -31,7 +31,7 @@ export interface Plano {
 
 const PADRAO_TESTE = /(^e2e\/)|(\/__tests__\/)|(\.spec\.[jt]sx?$)|(\.test\.[jt]sx?$)/;
 
-export function lerPlano(pasta: string): Plano {
+export function parseTaskPlan(pasta: string): TaskPlanModel {
   const arquivo = path.join(pasta, 'tarefas.md');
 
   if (!fs.existsSync(arquivo)) {
@@ -39,7 +39,7 @@ export function lerPlano(pasta: string): Plano {
   }
 
   const texto = fs.readFileSync(arquivo, 'utf8');
-  const tarefas: Tarefa[] = [];
+  const tarefas: PlanTask[] = [];
 
   for (const linha of texto.split('\n')) {
     const tarefa = lerLinha(linha);
@@ -54,11 +54,11 @@ export function lerPlano(pasta: string): Plano {
   };
 }
 
-function lerLinha(linha: string): Tarefa | null {
+function lerLinha(linha: string): PlanTask | null {
   const m = /^- \*\*(T-\d+)\*\*\s*·\s*(.+)$/.exec(linha.trim());
   if (!m?.[1] || !m[2]) return null;
 
-  const tarefa: Tarefa = { id: m[1], escopo: [], fronteira: '?', cobre: [], wave: 0, depende: [] };
+  const tarefa: PlanTask = { id: m[1], escopo: [], fronteira: '?', cobre: [], wave: 0, depende: [] };
 
   for (const parte of m[2].split('·')) {
     const campo = /^\s*([a-zà-ú]+):\s*(.+)$/i.exec(parte);
@@ -91,9 +91,9 @@ function lerLinha(linha: string): Tarefa | null {
 }
 
 /** DoR do plano: o que precisa estar certo antes de o humano decidir. */
-export function validarPlano(
-  plano: Plano,
-  criterios: SpecCriterio[],
+export function validateTaskPlan(
+  plano: TaskPlanModel,
+  criterios: SpecCriterion[],
 ): { bloqueios: string[]; avisos: string[] } {
   const bloqueios: string[] = [];
   const avisos: string[] = [];
@@ -154,7 +154,7 @@ export function validarPlano(
 }
 
 /** G2 (aprovação do plano) só é exigido quando há risco objetivo. */
-export function avaliarRisco(plano: Plano): { exige: boolean; motivos: string[] } {
+export function evaluatePlanRisk(plano: TaskPlanModel): { exige: boolean; motivos: string[] } {
   const motivos: string[] = [];
 
   if (plano.tarefas.length > 3) motivos.push(`${plano.tarefas.length} tarefas (limite 3 sem G2)`);

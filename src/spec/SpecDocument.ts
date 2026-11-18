@@ -10,21 +10,21 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
  * arquivo com um parser de 10 linhas (`scripts/gen-rastreio.mjs`), sem depender
  * de YAML. O harness pode usar `yaml`, mas precisa gravar o mesmo formato.
  */
-export type SpecEstado = 'rascunho' | 'em-revisao' | 'aprovado' | 'rejeitado' | 'entregue';
+export type SpecState = 'skeleton' | 'em-revisao' | 'aprovado' | 'rejeitado' | 'entregue';
 
-export interface SpecCriterio {
+export interface SpecCriterion {
   id: string;
   texto: string;
   prova: string | null;
 }
 
-export interface SpecRecord {
+export interface SpecDocument {
   /** Pasta da spec (`spec/<ID>-<slug>`). */
   dir: string;
   arquivo: string;
   front: Record<string, string>;
   corpo: string;
-  criterios: SpecCriterio[];
+  criterios: SpecCriterion[];
   /** Hash do bloco de critérios — é o que a aprovação assina. */
   sha: string;
 }
@@ -34,15 +34,15 @@ export interface SpecRecord {
  * (`scripts/gen-rastreio.mjs`). Divergir aqui quebra a aprovação: o app
  * reprovaria o `aprovado_sha` que o harness gravou.
  */
-export function shaDosCriterios(criterios: SpecCriterio[]): string {
+export function criteriaSha(criterios: SpecCriterion[]): string {
   const normalizado = criterios.map((c) => `${c.id}|${c.texto}|${c.prova ?? '-'}`).join('\n');
   return createHash('sha256').update(normalizado).digest('hex');
 }
 
 /** Extrai `- **CA-n** — texto` + a linha seguinte `prova: \`...\``. */
-export function lerCriterios(corpo: string): SpecCriterio[] {
-  const lista: SpecCriterio[] = [];
-  let atual: SpecCriterio | null = null;
+export function parseCriteria(corpo: string): SpecCriterion[] {
+  const lista: SpecCriterion[] = [];
+  let atual: SpecCriterion | null = null;
 
   for (const linha of corpo.split('\n')) {
     const ca = /^- \*\*(CA-\d+)\*\*\s*[—–-]\s*(.+)$/.exec(linha);
@@ -60,7 +60,7 @@ export function lerCriterios(corpo: string): SpecCriterio[] {
   return lista;
 }
 
-export function lerSpec(pasta: string): SpecRecord {
+export function readSpecDocument(pasta: string): SpecDocument {
   const arquivo = path.join(pasta, 'requisito.md');
   const texto = fs.readFileSync(arquivo, 'utf8');
   const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(texto);
@@ -77,18 +77,18 @@ export function lerSpec(pasta: string): SpecRecord {
   }
 
   const corpo = m[2] ?? '';
-  const criterios = lerCriterios(corpo);
+  const criterios = parseCriteria(corpo);
 
-  return { dir: pasta, arquivo, front, corpo, criterios, sha: shaDosCriterios(criterios) };
+  return { dir: pasta, arquivo, front, corpo, criterios, sha: criteriaSha(criterios) };
 }
 
-export function gravarSpec(spec: SpecRecord): void {
+export function writeSpecDocument(spec: SpecDocument): void {
   const front = stringifyYaml(spec.front, { lineWidth: 100 });
   fs.writeFileSync(spec.arquivo, `---\n${front}---\n${spec.corpo}`, 'utf8');
 }
 
 /** Acrescenta uma seção no fim do corpo (histórico append-only). */
-export function anexarHistorico(spec: SpecRecord, linha: string): void {
+export function appendHistory(spec: SpecDocument, linha: string): void {
   const bruto = fs.readFileSync(spec.arquivo, 'utf8');
   const partes = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(bruto);
   const corpo = (partes?.[2] ?? '').trimEnd();
@@ -101,7 +101,7 @@ export function anexarHistorico(spec: SpecRecord, linha: string): void {
 }
 
 /** Specs do alvo, ordenadas por id. */
-export function listarSpecs(cwd: string): { id: string; estado: string; slug: string }[] {
+export function listSpecs(cwd: string): { id: string; estado: string; slug: string }[] {
   const dir = path.join(cwd, 'spec');
   let entradas: fs.Dirent[] = [];
 
@@ -119,11 +119,11 @@ export function listarSpecs(cwd: string): { id: string; estado: string; slug: st
     const arquivo = path.join(dir, entrada.name, 'requisito.md');
     if (!fs.existsSync(arquivo)) continue;
 
-    const front = lerSpec(path.join(dir, entrada.name)).front;
+    const front = readSpecDocument(path.join(dir, entrada.name)).front;
 
     out.push({
       id: front.id ?? entrada.name,
-      estado: front.estado ?? 'rascunho',
+      estado: front.estado ?? 'skeleton',
       slug: entrada.name,
     });
   }
@@ -131,9 +131,9 @@ export function listarSpecs(cwd: string): { id: string; estado: string; slug: st
   return out.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function acharSpec(cwd: string, id: string): SpecRecord {
+export function findSpec(cwd: string, id: string): SpecDocument {
   const dir = path.join(cwd, 'spec');
-  const disponiveis = listarSpecs(cwd);
+  const disponiveis = listSpecs(cwd);
 
   const alvo = disponiveis.find((s) => s.id === id || s.slug.startsWith(`${id}-`));
 
@@ -143,7 +143,7 @@ export function acharSpec(cwd: string, id: string): SpecRecord {
     );
   }
 
-  return lerSpec(path.join(dir, alvo.slug));
+  return readSpecDocument(path.join(dir, alvo.slug));
 }
 
 export function slugify(texto: string): string {

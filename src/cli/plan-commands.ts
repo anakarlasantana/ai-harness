@@ -4,13 +4,13 @@ import type { Command } from 'commander';
 import type { AppEnv } from '../config/env.js';
 import { log } from '../core/logger.js';
 import {
-  aplicarRejeicao,
-  guardasDoAmbiente,
-  identidade,
-  perguntarDecisao,
-} from '../spec/Gate.js';
-import { acharSpec, gravarSpec, listarSpecs, type SpecRecord } from '../spec/SpecRecord.js';
-import { avaliarRisco, lerPlano, validarPlano, type Plano } from '../spec/Tasks.js';
+  applyRejection,
+  environmentGuards,
+  identity,
+  askDecision,
+} from '../spec/HumanApproval.js';
+import { findSpec, writeSpecDocument, listSpecs, type SpecDocument } from '../spec/SpecDocument.js';
+import { evaluatePlanRisk, parseTaskPlan, validateTaskPlan, type TaskPlanModel } from '../spec/TaskPlan.js';
 
 /**
  * `ai plan` — desenho + tarefas (waves) e o **G2**, que só existe quando o
@@ -23,7 +23,7 @@ interface PlanFlags {
 }
 
 export function registerPlanCommand(parent: Command, env: AppEnv): Command {
-  const plan = parent.command('plan').description('Plano: desenho, tarefas com waves e G2');
+  const plan = parent.command('plan').description('TaskPlanModel: desenho, tarefas com waves e G2');
 
   plan
     .command('create')
@@ -31,8 +31,8 @@ export function registerPlanCommand(parent: Command, env: AppEnv): Command {
     .description('Cria desenho.md e tarefas.md (uma tarefa por critério) na spec')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action((id: string, opts: PlanFlags) => {
-      const cwd = resolverDir(opts, env);
-      const registro = acharSpec(cwd, id);
+      const cwd = resolveDir(opts, env);
+      const registro = findSpec(cwd, id);
       const desenho = path.join(registro.dir, 'desenho.md');
       const tarefas = path.join(registro.dir, 'tarefas.md');
 
@@ -55,42 +55,42 @@ export function registerPlanCommand(parent: Command, env: AppEnv): Command {
     .option('--json', 'saída em JSON')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action((id: string, opts: PlanFlags) => {
-      const cwd = resolverDir(opts, env);
-      const registro = acharSpec(cwd, id);
-      const plano = lerPlano(registro.dir);
-      const dor = validarPlano(plano, registro.criterios);
-      const risco = avaliarRisco(plano);
+      const cwd = resolveDir(opts, env);
+      const registro = findSpec(cwd, id);
+      const plano = parseTaskPlan(registro.dir);
+      const dor = validateTaskPlan(plano, registro.criterios);
+      const risco = evaluatePlanRisk(plano);
 
       if (opts.json) {
         console.log(JSON.stringify({ id: registro.front.id, sha: plano.sha, risco, ...dor }, null, 2));
         return;
       }
 
-      console.log(relatorio(registro, plano, dor, risco));
-      avisarDrift(registro, plano);
+      console.log(report(registro, plano, dor, risco));
+      warnOnDrift(registro, plano);
     });
 
   plan
     .command('approve')
     .argument('<id>')
-    .description('G2: aprova o plano quando há risco (identidade + hash do plano)')
+    .description('G2: aprova o plano quando há risco (identity + hash do plano)')
     .option('--por <nome>', 'aprovar em nome de alguém (registrado como "declarado")')
     .option('--json', 'saída em JSON')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action(async (id: string, opts: PlanFlags) => {
-      const cwd = resolverDir(opts, env);
-      const registro = acharSpec(cwd, id);
-      const plano = lerPlano(registro.dir);
-      const dor = validarPlano(plano, registro.criterios);
-      const risco = avaliarRisco(plano);
+      const cwd = resolveDir(opts, env);
+      const registro = findSpec(cwd, id);
+      const plano = parseTaskPlan(registro.dir);
+      const dor = validateTaskPlan(plano, registro.criterios);
+      const risco = evaluatePlanRisk(plano);
 
       if (dor.bloqueios.length > 0) {
-        console.log(relatorio(registro, plano, dor, risco));
+        console.log(report(registro, plano, dor, risco));
         throw new Error(`${dor.bloqueios.length} bloqueio(s) no plano — corrija antes. Nada foi aprovado.`);
       }
 
       if (!risco.exige) {
-        registrar(registro, plano, {
+        recordApproval(registro, plano, {
           por: 'dispensado',
           conta: '',
           quando: new Date().toISOString(),
@@ -100,19 +100,19 @@ export function registerPlanCommand(parent: Command, env: AppEnv): Command {
         return;
       }
 
-      console.log(relatorio(registro, plano, dor, risco));
+      console.log(report(registro, plano, dor, risco));
 
-      const guardas = guardasDoAmbiente();
+      const guardas = environmentGuards();
 
       if (!guardas.ok && !opts.por) {
         for (const motivo of guardas.motivos) log.err(motivo);
         throw new Error('G2 exige um humano no terminal (ou --por, registrado como declarado).');
       }
 
-      const quem = identidade(cwd, opts.por);
+      const quem = identity(cwd, opts.por);
 
       if (!opts.por) {
-        const { decisao, motivo } = await perguntarDecisao();
+        const { decisao, motivo } = await askDecision();
 
         if (decisao === 's') return console.log('  nada registrado.');
         if (decisao === 'e') {
@@ -120,12 +120,12 @@ export function registerPlanCommand(parent: Command, env: AppEnv): Command {
           return console.log(`  edite ${path.relative(cwd, plano.arquivo)} e rode de novo.`);
         }
         if (decisao === 'r') {
-          aplicarRejeicao(registro, { identidade: quem, motivo });
+          applyRejection(registro, { identity: quem, motivo });
           return log.warn(`${registro.front.id}: plano rejeitado`);
         }
       }
 
-      registrar(registro, plano, {
+      recordApproval(registro, plano, {
         por: quem.por,
         conta: quem.conta ?? '',
         quando: new Date().toISOString(),
@@ -149,11 +149,11 @@ export function registerPlanCommand(parent: Command, env: AppEnv): Command {
     .option('--json', 'saída em JSON')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action((opts: PlanFlags) => {
-      const cwd = resolverDir(opts, env);
-      const linhas = listarSpecs(cwd).map((s) => {
-        const registro = acharSpec(cwd, s.id);
-        const plano = lerPlano(registro.dir);
-        const risco = avaliarRisco(plano);
+      const cwd = resolveDir(opts, env);
+      const linhas = listSpecs(cwd).map((s) => {
+        const registro = findSpec(cwd, s.id);
+        const plano = parseTaskPlan(registro.dir);
+        const risco = evaluatePlanRisk(plano);
 
         return {
           id: s.id,
@@ -176,9 +176,9 @@ export function registerPlanCommand(parent: Command, env: AppEnv): Command {
   return plan;
 }
 
-function registrar(
-  registro: SpecRecord,
-  plano: Plano,
+function recordApproval(
+  registro: SpecDocument,
+  plano: TaskPlanModel,
   dados: { por: string; conta: string; quando: string; risco: string; terminal?: boolean },
 ): void {
   registro.front.plano_aprovado_por = dados.por;
@@ -187,10 +187,10 @@ function registrar(
   registro.front.plano_sha = plano.sha;
   registro.front.plano_risco = dados.risco;
   registro.front.plano_terminal = dados.terminal ? 'true' : 'false';
-  gravarSpec(registro);
+  writeSpecDocument(registro);
 }
 
-function avisarDrift(registro: SpecRecord, plano: Plano): void {
+function warnOnDrift(registro: SpecDocument, plano: TaskPlanModel): void {
   if (registro.front.plano_sha && registro.front.plano_sha !== plano.sha) {
     log.warn(
       `plano mudou depois da aprovacao (sha ${registro.front.plano_sha.slice(0, 12)} -> ${plano.sha.slice(0, 12)}): re-aprovar.`,
@@ -198,13 +198,13 @@ function avisarDrift(registro: SpecRecord, plano: Plano): void {
   }
 }
 
-function resolverDir(opts: PlanFlags, env: AppEnv): string {
+function resolveDir(opts: PlanFlags, env: AppEnv): string {
   return opts.dir ? path.resolve(opts.dir) : env.cwd;
 }
 
-function relatorio(
-  registro: SpecRecord,
-  plano: Plano,
+function report(
+  registro: SpecDocument,
+  plano: TaskPlanModel,
   dor: { bloqueios: string[]; avisos: string[] },
   risco: { exige: boolean; motivos: string[] },
 ): string {
@@ -230,11 +230,11 @@ function relatorio(
   return linhas.join('\n');
 }
 
-function templateDesenho(registro: SpecRecord): string {
+function templateDesenho(registro: SpecDocument): string {
   return `# Desenho -- ${registro.front.id ?? ''}\n\n## Onde vive\n\n| Camada | Arquivo | Papel |\n| :--- | :--- | :--- |\n| ... | \`...\` | ... |\n\n## Fronteira\n\n- ...\n\n## Riscos anotados\n\n- ...\n`;
 }
 
-function templateTarefas(registro: SpecRecord): string {
+function templateTarefas(registro: SpecDocument): string {
   const linhas = registro.criterios.map(
     (ca, i) =>
       `- **T-${i + 1}** · escopo: \`a-preencher/${ca.id}\` · fronteira: produto · cobre: ${ca.id} · wave: 1`,

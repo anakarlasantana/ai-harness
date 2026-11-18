@@ -3,15 +3,15 @@ import path from 'node:path';
 import type { Command } from 'commander';
 import type { AppEnv } from '../config/env.js';
 import { log } from '../core/logger.js';
-import { avaliarDor, MAX_CRITERIOS } from '../spec/Dor.js';
+import { evaluateSpecReadiness, MAX_CRITERIA } from '../spec/SpecReadiness.js';
 import {
-  aplicarAprovacao,
-  aplicarRejeicao,
-  guardasDoAmbiente,
-  identidade,
-  perguntarDecisao,
-} from '../spec/Gate.js';
-import { acharSpec, listarSpecs, slugify, type SpecRecord } from '../spec/SpecRecord.js';
+  applyApproval,
+  applyRejection,
+  environmentGuards,
+  identity,
+  askDecision,
+} from '../spec/HumanApproval.js';
+import { findSpec, listSpecs, slugify, type SpecDocument } from '../spec/SpecDocument.js';
 
 /**
  * `ai spec` — levantar, revisar e **aprovar** uma spec.
@@ -36,8 +36,8 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
     .option('--json', 'saída em JSON')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action((opts: SpecFlags) => {
-      const cwd = resolverDir(opts, env);
-      const specs = listarSpecs(cwd);
+      const cwd = resolveDir(opts, env);
+      const specs = listSpecs(cwd);
 
       if (opts.json) {
         console.log(JSON.stringify({ specs }, null, 2));
@@ -56,10 +56,10 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
     .command('new')
     .argument('<id>', 'id da spec (ex.: RV-042, FEAT-001)')
     .argument('<titulo...>', 'título da feature')
-    .description('Abre uma spec em rascunho (spec/<ID>-<slug>/requisito.md)')
+    .description('Abre uma spec em skeleton (spec/<ID>-<slug>/requisito.md)')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action((id: string, titulo: string[], opts: SpecFlags) => {
-      const cwd = resolverDir(opts, env);
+      const cwd = resolveDir(opts, env);
       const nome = titulo.join(' ');
       const pasta = path.join(cwd, 'spec', `${id}-${slugify(nome)}`);
 
@@ -68,9 +68,9 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
       }
 
       fs.mkdirSync(pasta, { recursive: true });
-      fs.writeFileSync(path.join(pasta, 'requisito.md'), rascunho(id, nome), 'utf8');
+      fs.writeFileSync(path.join(pasta, 'requisito.md'), skeleton(id, nome), 'utf8');
 
-      log.ok(`${id}: rascunho em ${path.relative(cwd, pasta)}/requisito.md`);
+      log.ok(`${id}: skeleton em ${path.relative(cwd, pasta)}/requisito.md`);
       console.log(`  próximo: preencha os CA-n com \`prova:\` e rode \`ai spec review ${id}\``);
     });
 
@@ -81,16 +81,16 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
     .option('--json', 'saída em JSON')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action((id: string, opts: SpecFlags) => {
-      const cwd = resolverDir(opts, env);
-      const registro = acharSpec(cwd, id);
-      const dor = avaliarDor(registro, cwd);
+      const cwd = resolveDir(opts, env);
+      const registro = findSpec(cwd, id);
+      const dor = evaluateSpecReadiness(registro, cwd);
 
       if (opts.json) {
         console.log(JSON.stringify({ id: registro.front.id, sha: registro.sha, ...dor }, null, 2));
         return;
       }
 
-      console.log(relatorio(registro, dor));
+      console.log(report(registro, dor));
 
       if (
         registro.front.estado === 'aprovado' &&
@@ -106,15 +106,15 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
   spec
     .command('approve')
     .argument('<id>')
-    .description('Pausa e registra a aprovação (identidade automática + hash dos critérios)')
+    .description('Pausa e registra a aprovação (identity automática + hash dos critérios)')
     .option('--por <nome>', 'aprovar em nome de alguém (registrado como "declarado")')
     .option('--json', 'saída em JSON')
     .option('--dir <path>', 'diretório do repositório (default: cwd)')
     .action(async (id: string, opts: SpecFlags) => {
-      const cwd = resolverDir(opts, env);
-      const registro = acharSpec(cwd, id);
-      const dor = avaliarDor(registro, cwd);
-      const guardas = guardasDoAmbiente();
+      const cwd = resolveDir(opts, env);
+      const registro = findSpec(cwd, id);
+      const dor = evaluateSpecReadiness(registro, cwd);
+      const guardas = environmentGuards();
 
       if (!guardas.ok && !opts.por) {
         for (const motivo of guardas.motivos) log.err(motivo);
@@ -124,18 +124,18 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
       }
 
       if (dor.bloqueios.length > 0) {
-        console.log(relatorio(registro, dor));
+        console.log(report(registro, dor));
         throw new Error(
           `${dor.bloqueios.length} bloqueio(s) de DoR — corrija e rode de novo. Nada foi aprovado.`,
         );
       }
 
-      console.log(relatorio(registro, dor));
+      console.log(report(registro, dor));
 
-      const quem = identidade(cwd, opts.por);
+      const quem = identity(cwd, opts.por);
 
       if (!opts.por) {
-        const { decisao, motivo } = await perguntarDecisao();
+        const { decisao, motivo } = await askDecision();
 
         if (decisao === 's') {
           console.log('  nada registrado.');
@@ -149,14 +149,14 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
         }
 
         if (decisao === 'r') {
-          aplicarRejeicao(registro, { identidade: quem, motivo });
+          applyRejection(registro, { identity: quem, motivo });
           log.warn(`${registro.front.id}: rejeitado${motivo ? ` (${motivo})` : ''}`);
           return;
         }
       }
 
-      aplicarAprovacao(registro, {
-        identidade: quem,
+      applyApproval(registro, {
+        identity: quem,
         avisos: dor.avisos,
         terminal: !opts.por && guardas.ok,
       });
@@ -178,18 +178,18 @@ export function registerSpecCommand(parent: Command, env: AppEnv): void {
     });
 }
 
-function resolverDir(opts: SpecFlags, env: AppEnv): string {
+function resolveDir(opts: SpecFlags, env: AppEnv): string {
   return opts.dir ? path.resolve(opts.dir) : env.cwd;
 }
 
-function relatorio(spec: SpecRecord, dor: { bloqueios: string[]; avisos: string[] }): string {
+function report(spec: SpecDocument, dor: { bloqueios: string[]; avisos: string[] }): string {
   const linhas: string[] = [];
 
   linhas.push('');
   linhas.push(`── ${spec.front.id ?? '?'} · ${spec.front.titulo ?? '(sem título)'}`);
   linhas.push(
-    `   ${spec.criterios.length} critério(s) (teto ${MAX_CRITERIOS}) · estado ${
-      spec.front.estado ?? 'rascunho'
+    `   ${spec.criterios.length} critério(s) (teto ${MAX_CRITERIA}) · estado ${
+      spec.front.estado ?? 'skeleton'
     } · sha ${spec.sha.slice(0, 12)}`,
   );
 
@@ -202,14 +202,14 @@ function relatorio(spec: SpecRecord, dor: { bloqueios: string[]; avisos: string[
   return linhas.join('\n');
 }
 
-function rascunho(id: string, titulo: string): string {
+function skeleton(id: string, titulo: string): string {
   return `---
 id: ${id}
 titulo: ${titulo}
 persona: cliente
 prioridade: MEDIA
 origem:
-estado: rascunho
+estado: skeleton
 ---
 
 ## História

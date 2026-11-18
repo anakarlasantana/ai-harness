@@ -1,23 +1,23 @@
-import type { SpecRecord } from './SpecRecord.js';
-import { resolverProva } from './Prova.js';
+import type { SpecDocument } from './SpecDocument.js';
+import { resolveProof } from './ProofResolver.js';
 
 /**
  * Definition of Ready (DoR): o que a **máquina** confere antes de o humano
  * decidir. O humano aprova o artefato; cada critério é verificado aqui — é o que
  * permite 1 gate por feature em vez de 1 por critério.
  */
-export interface DorResultado {
+export interface SpecReadinessResult {
   bloqueios: string[];
   avisos: string[];
 }
 
 /** Teto de critérios por spec: acima disso a revisão humana perde eficácia. */
-export const MAX_CRITERIOS = 10;
+export const MAX_CRITERIA = 10;
 
 const NIVEIS = new Set(['unit', 'api', 'jornada']);
 const EARS = /\b(when|while|if|where|the system shall|o sistema (deve|deverá))\b/i;
 
-export function avaliarDor(spec: SpecRecord, cwd: string): DorResultado {
+export function evaluateSpecReadiness(spec: SpecDocument, cwd: string): SpecReadinessResult {
   const bloqueios: string[] = [];
   const avisos: string[] = [];
 
@@ -25,9 +25,9 @@ export function avaliarDor(spec: SpecRecord, cwd: string): DorResultado {
     bloqueios.push('nenhum critério de aceite (CA-n) declarado');
   }
 
-  if (spec.criterios.length > MAX_CRITERIOS) {
+  if (spec.criterios.length > MAX_CRITERIA) {
     bloqueios.push(
-      `${spec.criterios.length} critérios (teto ${MAX_CRITERIOS}) — divida a feature em specs menores`,
+      `${spec.criterios.length} critérios (teto ${MAX_CRITERIA}) — divida a feature em specs menores`,
     );
   }
 
@@ -42,7 +42,7 @@ export function avaliarDor(spec: SpecRecord, cwd: string): DorResultado {
       continue;
     }
 
-    const resolvida = resolverProva(ca.prova, cwd);
+    const resolvida = resolveProof(ca.prova, cwd);
 
     if (!resolvida.resolvido) {
       if (resolvida.tipo === 'api') avisos.push(`${ca.id}: ${resolvida.motivo}`);
@@ -58,7 +58,7 @@ export function avaliarDor(spec: SpecRecord, cwd: string): DorResultado {
     }
 
     if (ca.texto.length > 220) {
-      avisos.push(`${ca.id}: critério longo (${ca.texto.length} chars) — difícil de verificar`);
+      avisos.push(`${ca.id}: critério longo (${ca.texto.length} chars) — difícil de runVerification`);
     }
   }
 

@@ -6,9 +6,9 @@ import { LocalContextLoader } from '../context/LocalContextLoader.js';
 import { log } from '../core/logger.js';
 import { execSafe } from '../engine/CommandRunner.js';
 import { detectStack } from '../engine/StackDetector.js';
-import { buildDossie } from '../engine/rework/Dossie.js';
-import { escopoDe, violacoes } from '../engine/rework/Escopo.js';
-import { slugify } from '../spec/SpecRecord.js';
+import { buildReworkBriefing } from '../engine/rework/ReworkBriefing.js';
+import { patchScopeFor, findScopeViolations } from '../engine/rework/PatchScope.js';
+import { slugify } from '../spec/SpecDocument.js';
 import {
   ReworkRecordFile,
   listRecords,
@@ -20,14 +20,14 @@ import {
  * `ai fix <RW-id>` — a continuação do fluxo de rework (RV-059).
  *
  * O harness **conduz**, não edita: ele lê o registro, valida a fronteira, abre a
- * branch, escreve o dossiê (contexto mínimo) e — com `--verificar` — roda os
+ * branch, escreve o dossiê (contexto mínimo) e — com `--runVerification` — roda os
  * gates, confere o que o patch tocou e grava o veredito no próprio registro.
  *
  * Quem escreve o código é o agente de edição (Cline), com aprovação humana; o
  * harness é a régua. Assim ninguém "conserta" a regra que o julga.
  */
 interface FixFlags {
-  verificar?: boolean;
+  runVerification?: boolean;
   forcar?: boolean;
   semBranch?: boolean;
   journey?: string;
@@ -43,7 +43,7 @@ export function registerFixCommand(program: Command, env: AppEnv): void {
     .command('fix')
     .argument('<rwId>', 'id do registro (ex.: RW-2026-003)')
     .description('Conduz um rework registrado: fronteira, branch, dossiê e veredito')
-    .option('--verificar', 'roda os gates, confere a fronteira do patch e grava o veredito')
+    .option('--runVerification', 'roda os gates, confere a fronteira do patch e grava o veredito')
     .option('--forcar', 'permite classificação que não é correção de código (ambiente/dado)')
     .option('--sem-branch', 'não cria/troca de branch')
     .option('--journey <nome>', 'jornada declarada em e2e.journey para re-rodar')
@@ -70,7 +70,7 @@ export function registerFixCommand(program: Command, env: AppEnv): void {
 
       // 1) Fronteira: só `teste` e `produto` são correção de código.
       if (classe !== 'teste' && classe !== 'produto' && !opts.forcar) {
-        const escopo = escopoDe(classe).descricao;
+        const escopo = patchScopeFor(classe).descricao;
         log.warn(`${rwId} está classificado como "${classe}": ${escopo}.`);
         throw new Error(
           'Rework de ambiente/dado não vira patch. Corrija a causa externa, ou use --forcar se souber o que está fazendo.',
@@ -79,7 +79,7 @@ export function registerFixCommand(program: Command, env: AppEnv): void {
 
       // 1b) Todo rework aponta o critério violado: é o que fecha o ciclo
       // requisito -> teste -> defeito sem depender de memória.
-      const cas = normalizarCa(registro.front.ca);
+      const cas = normalizeCriteria(registro.front.ca);
 
       if (cas.length === 0 && !opts.forcar) {
         throw new Error(
@@ -88,16 +88,16 @@ export function registerFixCommand(program: Command, env: AppEnv): void {
       }
 
       // 2) Registro encerrado não se reabre por acidente.
-      if (!opts.verificar && !opts.forcar && ENCERRADOS.includes(registro.front.estado)) {
+      if (!opts.runVerification && !opts.forcar && ENCERRADOS.includes(registro.front.estado)) {
         throw new Error(
           `${rwId} está "${registro.front.estado}". Para reabrir, use --forcar (e diga o motivo no commit).`,
         );
       }
 
-      if (opts.verificar) {
-        await verificar({ cwd, local, rec, registro, opts });
+      if (opts.runVerification) {
+        await runVerification({ cwd, local, rec, registro, opts });
       } else {
-        await preparar({ cwd, local, rec, registro, opts });
+        await prepare({ cwd, local, rec, registro, opts });
       }
     });
 }
@@ -111,7 +111,7 @@ interface Ctx {
 }
 
 /** Prepara o trabalho: branch + dossiê + estado `triado` no registro. */
-async function preparar(ctx: Ctx): Promise<void> {
+async function prepare(ctx: Ctx): Promise<void> {
   const { cwd, local, rec, registro, opts } = ctx;
   const rw = registro.front;
   const branch = `fix/${rw.id.toLowerCase()}-${slugify(rw.sintoma ?? rw.classificacao)}`;
@@ -139,11 +139,11 @@ async function preparar(ctx: Ctx): Promise<void> {
   await rec.update((front) => {
     front.estado = 'triado';
     front.patch = { ...(front.patch ?? {}), branch: opts.semBranch ? front.patch?.branch : branch };
-    front.proximo_passo = `aplicar o patch seguindo o dossiê e rodar \`ai fix ${rw.id} --verificar\``;
+    front.proximo_passo = `aplicar o patch seguindo o dossiê e rodar \`ai fix ${rw.id} --runVerification\``;
   });
 
   // O dossiê nasce depois do update: ele mostra o estado em que o trabalho está.
-  const dossie = buildDossie({ record: rec.read(), branch, comandos, dossiePath });
+  const dossie = buildReworkBriefing({ record: rec.read(), branch, comandos, dossiePath });
   fs.writeFileSync(dossiePath, dossie, 'utf8');
 
   await rec.append('Histórico', [
@@ -159,29 +159,29 @@ async function preparar(ctx: Ctx): Promise<void> {
 
   log.ok(`${rw.id}: triado${opts.semBranch ? '' : ` · branch ${branch}`}`);
   console.log('');
-  console.log(`fronteira: ${escopoDe(rw.classificacao).descricao}`);
+  console.log(`fronteira: ${patchScopeFor(rw.classificacao).descricao}`);
   console.log(`dossiê:    ${path.relative(cwd, dossiePath)}`);
-  console.log(`próximo:   ai fix ${rw.id} --verificar`);
+  console.log(`próximo:   ai fix ${rw.id} --runVerification`);
   console.log('');
 }
 
 /** Verifica: fronteira do patch, gates declarados e veredito no registro. */
-async function verificar(ctx: Ctx): Promise<void> {
+async function runVerification(ctx: Ctx): Promise<void> {
   const { cwd, local, rec, registro, opts } = ctx;
   const rw = registro.front;
   const registroDir = path.relative(cwd, reworkDir(cwd, local.config.rework?.dir));
   const tocados = await changedFiles(cwd, [registroDir]);
 
   if (tocados.length === 0) {
-    throw new Error('Nada para verificar: a árvore está limpa (o patch foi commitado ou não existe).');
+    throw new Error('Nada para runVerification: a árvore está limpa (o patch foi commitado ou não existe).');
   }
 
-  const fora = violacoes(rw.classificacao, tocados);
+  const fora = findScopeViolations(rw.classificacao, tocados);
 
   if (fora.length > 0) {
     await rec.update((front) => {
       front.estado = 'bloqueado';
-      front.proximo_passo = 'reverter os arquivos fora da fronteira e rodar --verificar de novo';
+      front.proximo_passo = 'reverter os arquivos fora da fronteira e rodar --runVerification de novo';
     });
     await rec.append('Veredito (harness)', [
       `- ${new Date().toISOString()} — **bloqueado**: patch tocou arquivo fora do escopo de \`${rw.classificacao}\`.`,
@@ -232,7 +232,7 @@ async function verificar(ctx: Ctx): Promise<void> {
       ? 'abrir o PR citando o id do rework'
       : tentativas >= 3
         ? 'três tentativas sem sucesso — escala para humano'
-        : 'ajustar o patch e rodar --verificar de novo';
+        : 'ajustar o patch e rodar --runVerification de novo';
   });
   await rec.append(`Veredito (harness) — tentativa ${tentativas}`, [
     `- ${new Date().toISOString()} — **${verde ? 'verificado' : 'não fechado'}**`,
@@ -309,7 +309,7 @@ async function changedFiles(cwd: string, ignorar: string[] = []): Promise<string
 }
 
 /** `ca: CA-3` ou `ca: [CA-3, CA-5]` (o YAML pode vir como string ou lista). */
-function normalizarCa(valor: unknown): string[] {
+function normalizeCriteria(valor: unknown): string[] {
   if (Array.isArray(valor)) return valor.map(String).map((c) => c.trim()).filter(Boolean);
   if (typeof valor === 'string') {
     return valor

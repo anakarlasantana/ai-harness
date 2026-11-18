@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { loadEnv } from './config/env.js';
-import { registerCommands } from './cli/commands.js';
+import { registerCommands } from './cli/command-registry.js';
 import { log, setDebug } from './core/logger.js';
 
 /**

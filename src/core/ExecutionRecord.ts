@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Lifecycle status of a task as it moves through the delivery pipeline.
  * Mirrors the CLI stages: plan -> code -> qa -> (rework loop) -> sync.
  */
-export const TASK_STATUSES = [
+export const EXECUTION_STATUSES = [
   'planned',
   'coded',
   'qa-passed',
@@ -14,7 +14,7 @@ export const TASK_STATUSES = [
   'error',
 ] as const;
 
-export type TaskStatus = (typeof TASK_STATUSES)[number];
+export type ExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 
 /**
  * One entry in the structured execution trace that powers the local
@@ -77,9 +77,9 @@ export type TestRun = z.infer<typeof TestRunSchema>;
  * architecture decision, which files were touched, the full QA feedback
  * timeline, and the step-by-step execution trace.
  */
-export const TaskSchema = z.object({
+export const ExecutionRecordSchema = z.object({
   id: z.string().min(1),
-  status: z.enum(TASK_STATUSES),
+  status: z.enum(EXECUTION_STATUSES),
   description: z.string().default(''),
   /** Output of the planning (plan) stage. */
   architectureDecision: z.string().default(''),
@@ -95,10 +95,10 @@ export const TaskSchema = z.object({
   updatedAt: z.string(),
 });
 
-export type Task = z.infer<typeof TaskSchema>;
+export type ExecutionRecord = z.infer<typeof ExecutionRecordSchema>;
 
 /** Build a fresh task record with sane defaults. */
-export function createTask(id: string, description = ''): Task {
+export function createExecutionRecord(id: string, description = ''): ExecutionRecord {
   const now = new Date().toISOString();
   return {
     id,

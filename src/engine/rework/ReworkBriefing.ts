@@ -1,11 +1,11 @@
 import type { ReworkRecord } from './ReworkRecord.js';
-import { escopoDe } from './Escopo.js';
+import { patchScopeFor } from './PatchScope.js';
 
 /**
  * Dossiê: o contexto mínimo que o agente precisa para corrigir **sem** reler o
  * repositório inteiro. Teto de 60 linhas, montado a partir do registro.
  */
-export function buildDossie(opts: {
+export function buildReworkBriefing(opts: {
   record: ReworkRecord;
   branch?: string;
   comandos: string[];
@@ -13,7 +13,7 @@ export function buildDossie(opts: {
 }): string {
   const { record, branch, comandos } = opts;
   const f = record.front;
-  const escopo = escopoDe(f.classificacao);
+  const escopo = patchScopeFor(f.classificacao);
   const l: string[] = [];
 
   l.push(`# dossiê — ${f.id}`);
@@ -61,7 +61,7 @@ export function buildDossie(opts: {
     l.push('');
   }
 
-  l.push('## como verificar');
+  l.push('## como runVerification');
   for (const [i, cmd] of comandos.entries()) l.push(`${i + 1}. \`${cmd}\``);
   l.push('');
 
@@ -72,7 +72,7 @@ export function buildDossie(opts: {
   }
 
   l.push('## depois de aplicar');
-  l.push(`\`ai fix ${f.id} --verificar\` — roda os gates, confere a fronteira e grava o veredito no registro.`);
+  l.push(`\`ai fix ${f.id} --runVerification\` — roda os gates, confere a fronteira e grava o veredito no registro.`);
 
   return l.slice(0, 60).join('\n') + '\n';
 }

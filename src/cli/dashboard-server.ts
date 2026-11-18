@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { TaskMemory } from '../memory/TaskMemory.js';
+import { ExecutionMemory } from '../memory/ExecutionMemory.js';
 import { log } from '../core/logger.js';
 
 /**
@@ -21,7 +21,7 @@ export interface DashboardOptions {
 export function startDashboard(opts: DashboardOptions): Promise<http.Server> {
   const port = opts.port ?? Number(process.env.DASHBOARD_PORT ?? 3000);
   const host = opts.host ?? '127.0.0.1';
-  const memory = new TaskMemory(opts.cwd);
+  const memory = new ExecutionMemory(opts.cwd);
 
   const server = http.createServer(async (req, res) => {
     const url = req.url ?? '/';

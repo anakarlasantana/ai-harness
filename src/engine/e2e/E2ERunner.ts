@@ -163,7 +163,7 @@ export class E2ERunner {
       return step;
     } catch (err) {
       // Comando fora da whitelist ou binário inexistente: falha do contrato, não
-      // do alvo. Vira passo falho para o digest registrar a causa.
+      // do alvo. Vira passo falho para o digest recordApproval a causa.
       log.warn(`e2e: ${name} não executou: ${(err as Error).message}`);
       return {
         name,

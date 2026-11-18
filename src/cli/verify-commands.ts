@@ -3,13 +3,13 @@ import type { Command } from 'commander';
 import type { AppEnv } from '../config/env.js';
 import { LocalContextLoader } from '../context/LocalContextLoader.js';
 import { log } from '../core/logger.js';
-import type { TestRun } from '../core/Task.js';
+import type { TestRun } from '../core/ExecutionRecord.js';
 import { execSafe } from '../engine/CommandRunner.js';
 import { detectStack } from '../engine/StackDetector.js';
 import { E2ERunner, writeRunArtifacts } from '../engine/e2e/E2ERunner.js';
 import { buildDigest, causaDoFalha } from '../engine/e2e/EvidenceDigest.js';
 import { E2EDeclarationSchema, type E2EDeclaration, type E2EStep } from '../engine/e2e/types.js';
-import { TaskMemory } from '../memory/TaskMemory.js';
+import { ExecutionMemory } from '../memory/ExecutionMemory.js';
 
 /**
  * `ai e2e` — verificação de uma aplicação.
@@ -70,7 +70,7 @@ export async function runE2ECommand(
 ): Promise<void> {
       const cwd = opts.dir ? path.resolve(opts.dir) : env.cwd;
       const local = LocalContextLoader.load(cwd);
-      const memory = new TaskMemory(cwd);
+      const memory = new ExecutionMemory(cwd);
       const alvo = path.basename(cwd);
 
       const taskId =
@@ -138,7 +138,7 @@ export async function runE2ECommand(
 interface RunReadinessArgs {
   cwd: string;
   local: ReturnType<typeof LocalContextLoader.load>;
-  memory: TaskMemory;
+  memory: ExecutionMemory;
   taskId: string;
   run: TestRun;
   commit?: string;
@@ -222,7 +222,7 @@ async function runReadiness(args: RunReadinessArgs): Promise<void> {
 interface RunE2EArgs {
   cwd: string;
   local: ReturnType<typeof LocalContextLoader.load>;
-  memory: TaskMemory;
+  memory: ExecutionMemory;
   taskId: string;
   run: TestRun;
   commit?: string;
@@ -248,7 +248,7 @@ async function runE2E(args: RunE2EArgs): Promise<void> {
       registro.current = {
         ...registro.current,
         command: journeyCommand(declaration, opts.journey),
-        steps: [...registro.current.steps, passoParaDashboard(step)],
+        steps: [...registro.current.steps, stepForDashboard(step)],
         headline: `${step.name}: ${step.status}`,
       };
       await memory.upsertTestRun(taskId, registro.current);
@@ -269,7 +269,7 @@ async function runE2E(args: RunE2EArgs): Promise<void> {
     status: result.ok ? 'passed' : 'failed',
     finishedAt: result.finishedAt,
     durationMs: result.durationMs,
-    steps: result.steps.map(passoParaDashboard),
+    steps: result.steps.map(stepForDashboard),
     facts: result.facts,
     evidenceDir: result.evidenceDir,
     digestPath,
@@ -333,7 +333,7 @@ function journeyCommand(declaration: E2EDeclaration, journey?: string): string {
   return (journey ? declaration.journey[journey] : undefined) ?? declaration.command;
 }
 
-function passoParaDashboard(step: E2EStep): TestRun['steps'][number] {
+function stepForDashboard(step: E2EStep): TestRun['steps'][number] {
   return {
     name: step.name,
     status: step.status,
@@ -406,7 +406,7 @@ export function registerApiCommand(parent: Command, env: AppEnv): void {
         );
       }
 
-      const memory = new TaskMemory(cwd);
+      const memory = new ExecutionMemory(cwd);
       const taskId = taskIdArg ?? `api-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`;
       const runId = new Date().toISOString().replace(/[:.]/g, '-');
       const startedAt = new Date().toISOString();
