@@ -1,7 +1,7 @@
 import type { AppEnv, ProviderKind } from '../config/env.js';
 import { log } from '../core/logger.js';
 import type { EndpointProfile } from './EndpointProfile.js';
-import { detectSlug, qualifyModel, slugLabel, type ProviderSlug } from './modelSlug.js';
+import { detectSlug, qualifyModel, slugLabel, type ProviderSlug } from './model-slug.js';
 import { normalizeOpenAIBaseUrl } from './url.js';
 
 /**

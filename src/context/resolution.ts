@@ -1,6 +1,6 @@
 import type { AppEnv, ProviderKind } from '../config/env.js';
 import { resolveEndpoint, resolveModelFallbacks, resolveProviderKind } from '../providers/EndpointResolver.js';
-import { qualifyModel } from '../providers/modelSlug.js';
+import { qualifyModel } from '../providers/model-slug.js';
 import type { LocalContextConfig } from './LocalContextLoader.js';
 
 /**

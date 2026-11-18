@@ -1,5 +1,5 @@
 import type { ProviderKind } from '../config/env.js';
-import type { ProviderSlug } from './modelSlug.js';
+import type { ProviderSlug } from './model-slug.js';
 
 /**
  * EndpointProfile — single source of truth for "where does the model live and

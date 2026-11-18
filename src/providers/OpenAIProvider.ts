@@ -3,7 +3,7 @@ import type { AppEnv } from '../config/env.js';
 import { log } from '../core/logger.js';
 import type { EndpointProfile } from './EndpointProfile.js';
 import { resolveEndpoint } from './EndpointResolver.js';
-import { detectSlug, qualifyModel, type ProviderSlug } from './modelSlug.js';
+import { detectSlug, qualifyModel, type ProviderSlug } from './model-slug.js';
 import { withRetry } from './RetryPolicy.js';
 import { stripToolArtifacts } from './sanitize-tool-artifacts.js';
 import type {

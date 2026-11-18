@@ -115,7 +115,7 @@ applyApproval(aprovada, { identity: quem, avisos: [], quando: '2026-01-01T00:00:
 const lida = readSpecDocument(pasta);
 ok('aprovação grava estado', lida.front.estado === 'aprovado');
 ok('aprovação grava sha', lida.front.aprovado_sha === lida.sha);
-ok('aprovação grava identity', lida.front.aprovado_conta === 't-ana.santana@cni.com.br');
+ok('aprovação grava identidade', lida.front.aprovado_conta === 't-ana.santana@cni.com.br');
 ok('aprovação --por não é terminal', lida.front.aprovado_terminal === 'false');
 ok('histórico anexado', /## Histórico/.test(readFileSync(arquivo, 'utf8')));
 
@@ -160,7 +160,7 @@ const tarefas = (n) =>
   ).join('\n') + '\n';
 
 writeFileSync(path.join(pastaGate, 'requisito.md'), specGate(''));
-ok('gate: skeleton bloqueia', !checkCodeGates(alvoGate, 'FEAT-009').ok);
+ok('gate: rascunho bloqueia', !checkCodeGates(alvoGate, 'FEAT-009').ok);
 
 writeFileSync(
   path.join(pastaGate, 'requisito.md'),
