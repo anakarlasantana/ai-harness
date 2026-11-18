@@ -64,6 +64,13 @@ const LocalConfigSchema = z.object({
           timeoutMs: z.number().int().positive().optional(),
         })
         .optional(),
+      /** Persona de API (L1): o comando que roda os testes de integração do alvo. */
+      api: z
+        .object({
+          command: z.string().min(1),
+          timeoutMs: z.number().int().positive().optional(),
+        })
+        .optional(),
     })
     .optional(),
   /** Ciclo ponta-a-ponta declarado pelo alvo (validado em `engine/e2e/types`). */

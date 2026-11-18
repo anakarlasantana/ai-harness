@@ -39,6 +39,8 @@ export const ReworkFrontSchema = z
       .optional(),
     ambiente: z.record(z.string(), z.any()).optional(),
     classificacao: z.enum(REWORK_CLASSES).default('indefinido'),
+    /** Critério(s) de aceite que este rework viola (CA-n da spec). */
+    ca: z.union([z.string(), z.array(z.string())]).optional(),
     severidade: z.string().optional(),
     sintoma: z.string().optional(),
     reproducao: z.string().optional(),

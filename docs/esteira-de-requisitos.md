@@ -85,6 +85,25 @@ igual ou posterior.
 dispensado`. Com risco, abre a mesma pausa do G1 e grava `plano_sha` (editar o
 plano depois invalida).
 
+## 6.2 O código só começa com gate verde
+
+`ai build code <taskId> "<instrução>" --spec <ID>` verifica, antes de chamar o
+modelo:
+
+- G1: a spec existe, está `aprovado` e o `aprovado_sha` casa com os critérios de
+  hoje;
+- G2: quando o plano tem risco, `plano_aprovado_por` existe e `plano_sha` casa.
+
+Sem `--spec`, o comando **recusa**. `--sem-spec` existe para manutenção
+declarada: avisa, e a decisão fica registrada no histórico da task.
+
+O rework segue a outra pista: `ai fix <RW-id>` exige `ca:` (o critério violado)
+— `--forcar` só para registro legado.
+
+`ai verify api` roda `verification.api.command` (persona de API, L1) e registra
+como `testRuns[].kind = "api"`. Sem essa chave no `.harness/context.json`, o
+comando diz o que declarar em vez de inventar um comando.
+
 ## 7. Limites
 
 - O harness **não escreve** requisito nem código: ele lê, mede e registra.

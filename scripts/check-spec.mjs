@@ -124,6 +124,79 @@ ok('rejeição grava motivo', /motivo_rejeicao: faltou regra/.test(readFileSync(
 
 rmSync(alvo, { recursive: true, force: true });
 
+const { avaliarGates } = await import(path.join(RAIZ, 'dist', 'spec', 'Gates.js'));
+
+const alvoGate = mkdtempSync(path.join(tmpdir(), 'harness-gates-'));
+const pastaGate = path.join(alvoGate, 'spec', 'FEAT-009-gate');
+mkdirSync(pastaGate, { recursive: true });
+mkdirSync(path.join(alvoGate, 'backend', 'src', 'x', '__tests__'), { recursive: true });
+writeFileSync(path.join(alvoGate, 'backend', 'src', 'x', '__tests__', 'x.spec.ts'), '// t\n');
+
+const specGate = (extra) => `---
+id: FEAT-009
+titulo: Gate
+estado: rascunho
+${extra}
+---
+
+## História
+
+x
+
+## Critérios de aceite
+
+- **CA-1** — When a, the sistema shall b.
+  prova: \`unit:backend/src/x/__tests__/x.spec.ts\`
+
+## Não-objetivos
+
+- x
+`;
+
+const tarefas = (n) =>
+  Array.from(
+    { length: n },
+    (_, i) => `- **T-${i + 1}** · escopo: \`backend/src/x/**\` · fronteira: produto · cobre: CA-1 · wave: 1`,
+  ).join('\n') + '\n';
+
+writeFileSync(path.join(pastaGate, 'requisito.md'), specGate(''));
+ok('gate: rascunho bloqueia', !avaliarGates(alvoGate, 'FEAT-009').ok);
+
+writeFileSync(
+  path.join(pastaGate, 'requisito.md'),
+  specGate(`aprovado_por: Ana\naprovado_sha: ${lerSpec(pastaGate).sha}`).replace(
+    'estado: rascunho',
+    'estado: aprovado',
+  ),
+);
+writeFileSync(path.join(pastaGate, 'tarefas.md'), tarefas(1));
+ok('gate: aprovado e plano sem risco passa', avaliarGates(alvoGate, 'FEAT-009').ok, avaliarGates(alvoGate, 'FEAT-009').motivos.join(' | '));
+
+const antes = lerSpec(pastaGate);
+writeFileSync(
+  path.join(pastaGate, 'requisito.md'),
+  specGate(`aprovado_por: Ana\naprovado_sha: ${antes.sha}`)
+    .replace('estado: rascunho', 'estado: aprovado')
+    .replace('shall b', 'shall c'),
+);
+ok(
+  'gate: critério mudado depois da aprovação bloqueia',
+  avaliarGates(alvoGate, 'FEAT-009').motivos.some((m) => m.includes('critérios mudaram')),
+);
+
+const specOk = lerSpec(pastaGate);
+writeFileSync(
+  path.join(pastaGate, 'requisito.md'),
+  specGate(`aprovado_por: Ana\naprovado_sha: ${specOk.sha}`).replace('estado: rascunho', 'estado: aprovado'),
+);
+writeFileSync(path.join(pastaGate, 'tarefas.md'), tarefas(4));
+ok(
+  'gate: G2 exigido sem aprovação de plano bloqueia',
+  avaliarGates(alvoGate, 'FEAT-009').motivos.some((m) => m.includes('G2')),
+);
+
+rmSync(alvoGate, { recursive: true, force: true });
+
 function writeFixture(nome, conteudo) {
   const dir = path.join(alvo, 'spec', nome);
   mkdirSync(dir, { recursive: true });

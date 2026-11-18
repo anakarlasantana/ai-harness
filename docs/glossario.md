@@ -48,7 +48,7 @@ ausente do CLI).
 | `ai build design-code` | implementa UI fiel ao design | código | implementado |
 | `ai verify ready` | roda o “definition of done” declarado | veredito | implementado |
 | `ai verify e2e` | roda as jornadas declaradas (+ digest) | `testRuns[]` | implementado |
-| `ai verify api` | persona de API (L1) | veredito | planejado (fase E) |
+| `ai verify api` | persona de API (L1) | veredito | implementado |
 | `ai verify proofs` | confere se cada `CA` tem prova resolvida | `rastreio.json` | planejado (fase F) |
 | `ai fix <rwId>` | conduz um rework: fronteira, branch, dossiê | registro | implementado |
 | `ai fix <rwId> --verificar` | gates + veredito no registro | registro | implementado |

@@ -77,6 +77,16 @@ export function registerFixCommand(program: Command, env: AppEnv): void {
         );
       }
 
+      // 1b) Todo rework aponta o critério violado: é o que fecha o ciclo
+      // requisito -> teste -> defeito sem depender de memória.
+      const cas = normalizarCa(registro.front.ca);
+
+      if (cas.length === 0 && !opts.forcar) {
+        throw new Error(
+          `${rwId} não declara \`ca:\` (critério de aceite violado). Preencha com o CA da spec (ex.: ca: CA-3) ou use --forcar em registro legado.`,
+        );
+      }
+
       // 2) Registro encerrado não se reabre por acidente.
       if (!opts.verificar && !opts.forcar && ENCERRADOS.includes(registro.front.estado)) {
         throw new Error(
@@ -298,3 +308,14 @@ async function changedFiles(cwd: string, ignorar: string[] = []): Promise<string
     .filter((c) => !ignorar.some((dir) => dir.length > 0 && c.startsWith(`${dir}/`)));
 }
 
+/** `ca: CA-3` ou `ca: [CA-3, CA-5]` (o YAML pode vir como string ou lista). */
+function normalizarCa(valor: unknown): string[] {
+  if (Array.isArray(valor)) return valor.map(String).map((c) => c.trim()).filter(Boolean);
+  if (typeof valor === 'string') {
+    return valor
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+  }
+  return [];
+}

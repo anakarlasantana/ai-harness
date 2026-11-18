@@ -32,8 +32,9 @@ import {
 import type { LLMProvider } from '../providers/LLMProvider.js';
 import { startDashboard } from './dashboard.js';
 import { registerFixCommand } from './fix-command.js';
-import { registerE2ECommand, runE2ECommand } from './verify-command.js';
+import { registerApiCommand, registerE2ECommand, runE2ECommand } from './verify-command.js';
 import { registerPlanCommand } from './plan-command.js';
+import { avaliarGates } from '../spec/Gates.js';
 import { registerSpecCommand } from './spec-command.js';
 
 export interface CommonFlags {
@@ -304,8 +305,36 @@ export function registerCommands(program: Command, env: AppEnv): void {
     });
   };
 
-  const hCode = async (taskId: string, instrucao: string, opts: CommonFlags): Promise<void> => {
+  const hCode = async (
+    taskId: string,
+    instrucao: string,
+    opts: CommonFlags & { spec?: string; semSpec?: boolean },
+  ): Promise<void> => {
     const memory = new TaskMemory(env.cwd);
+
+    // O código não começa sem spec aprovada (G1) — e sem G2 quando o plano tem
+    // risco. `--sem-spec` existe para manutenção declarada, e fica registrado.
+    if (opts.spec) {
+      const gates = avaliarGates(env.cwd, opts.spec);
+
+      if (!gates.ok) {
+        for (const motivo of gates.motivos) log.err(motivo);
+        throw new Error(`código bloqueado: gate(s) pendente(s) para ${opts.spec}`);
+      }
+
+      await memory.appendQaFeedback(
+        taskId,
+        `código sob spec ${opts.spec} (critérios sha ${gates.spec?.sha.slice(0, 12) ?? '-'}, plano ${gates.spec?.front.plano_aprovado_por ?? '-'})`,
+      );
+      log.ok(`G1 ok · ${opts.spec} · sha ${gates.spec?.sha.slice(0, 12)}`);
+    } else if (!opts.semSpec) {
+      throw new Error(
+        'código exige spec aprovada: use `--spec <ID>` (rode `ai spec approve` antes) ou `--sem-spec` para manutenção declarada.',
+      );
+    } else {
+      log.warn('--sem-spec: gate G1 não verificado (manutenção declarada).');
+    }
+
     await runStage({
       env,
       flags: opts,
@@ -491,8 +520,14 @@ export function registerCommands(program: Command, env: AppEnv): void {
     .description('Execução: implementar, revisar, simplificar, entregar, desenhar, auditar');
 
   const asCode = (cmd: Command): Command =>
-    addCommon(cmd.argument('<taskId>').argument('<instrucao>').description('Implementa (developer + TDD)'))
-      .action(hCode);
+    addCommon(
+      cmd
+        .argument('<taskId>')
+        .argument('<instrucao>')
+        .option('--spec <id>', 'spec aprovada que autoriza este código (G1; G2 quando houver risco)')
+        .option('--sem-spec', 'manutenção declarada sem spec (o gate G1 não é verificado)')
+        .description('Implementa (developer + TDD) — exige spec aprovada'),
+    ).action(hCode);
   const asReview = (cmd: Command): Command =>
     addCommon(cmd.argument('<taskId>').description('Revisão em 5 eixos (code-reviewer + security + arch)'))
       .action(hStage('review'));
@@ -551,6 +586,7 @@ export function registerCommands(program: Command, env: AppEnv): void {
     );
 
   registerE2ECommand(verify, env);
+  registerApiCommand(verify, env);
   registerFixCommand(program, env);
 
   const ops = program.command('ops').description('Ferramentas: configuração, modelos, mapa e dashboard');

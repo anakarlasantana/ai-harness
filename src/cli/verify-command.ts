@@ -386,3 +386,80 @@ function verdict(args: VerdictArgs): void {
   if (args.digestPath) console.log(`  digest: ${args.digestPath}`);
   console.log('');
 }
+
+/** `ai verify api` — persona de API (L1): roda o comando que o alvo declarou. */
+export function registerApiCommand(parent: Command, env: AppEnv): void {
+  parent
+    .command('api')
+    .argument('[taskId]')
+    .description('Persona de API (L1): roda `verification.api.command` do alvo e registra o veredito')
+    .option('--json', 'saída em JSON')
+    .option('--dir <path>', 'diretório do repositório (default: cwd)')
+    .action(async (taskIdArg: string | undefined, opts: VerifyFlags) => {
+      const cwd = opts.dir ? path.resolve(opts.dir) : env.cwd;
+      const local = LocalContextLoader.load(cwd);
+      const api = local.config.verification?.api;
+
+      if (!api?.command) {
+        throw new Error(
+          'o alvo não declarou `verification.api.command` em .harness/context.json (ex.: "make test:api").',
+        );
+      }
+
+      const memory = new TaskMemory(cwd);
+      const taskId = taskIdArg ?? `api-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`;
+      const runId = new Date().toISOString().replace(/[:.]/g, '-');
+      const startedAt = new Date().toISOString();
+
+      await memory.upsertTestRun(taskId, {
+        id: runId,
+        kind: 'api',
+        command: api.command,
+        status: 'running',
+        startedAt,
+        steps: [],
+        facts: { fiveXX: 0, consoleErrors: 0 },
+        headline: 'em execução',
+      });
+
+      const t0 = Date.now();
+      const res = await execSafe(api.command, cwd, { timeoutMs: api.timeoutMs ?? 600_000 });
+      const finishedAt = new Date().toISOString();
+      const passos = res.clipped.split('\n').filter((l) => l.trim()).slice(-3).join(' | ').slice(0, 240);
+
+      await memory.upsertTestRun(taskId, {
+        id: runId,
+        kind: 'api',
+        command: api.command,
+        status: res.ok ? 'passed' : 'failed',
+        startedAt,
+        finishedAt,
+        durationMs: Date.now() - t0,
+        steps: [{ name: api.command, status: res.ok ? 'passed' : 'failed', durationMs: Date.now() - t0, detail: res.ok ? 'ok' : passos }],
+        facts: { fiveXX: 0, consoleErrors: 0 },
+        headline: res.ok ? 'persona de API verde' : 'falhou',
+      });
+      await memory.setStatus(taskId, res.ok ? 'qa-passed' : 'qa-failed');
+      await memory.appendTrace(taskId, {
+        timestamp: finishedAt,
+        activePersona: 'test-runner',
+        status: res.ok ? 'success' : 'error',
+        toolCalled: api.command,
+        thought: `${res.ok ? 'api PASSOU' : 'api FALHOU'} em ${Math.round((Date.now() - t0) / 1000)}s`,
+      });
+
+      if (!res.ok) process.exitCode = 1;
+
+      verdict({
+        ok: res.ok,
+        titulo: `api · ${path.basename(cwd)}`,
+        durationMs: Date.now() - t0,
+        passos: 1,
+        facts: undefined,
+        digestPath: undefined,
+        primeiraCausa: res.ok ? undefined : res.clipped.split('\n').find((l) => l.trim())?.slice(0, 160),
+        taskId,
+        runId,
+      });
+    });
+}

@@ -47,7 +47,7 @@ export const TestStepSchema = z.object({
 export const TestRunSchema = z.object({
   id: z.string(),
   /** `readiness` = gates do repositório; `e2e` = jornada ponta-a-ponta. */
-  kind: z.enum(['readiness', 'e2e']),
+  kind: z.enum(['readiness', 'e2e', 'api']),
   journey: z.string().optional(),
   command: z.string().default(''),
   status: z.enum(['running', 'passed', 'failed']),
