@@ -87,7 +87,7 @@ const provaQuebrada = writeFixture(
 );
 ok(
   'DoR: prova ausente bloqueia',
-  avaliarDor(lerSpec(provaQuebrada), alvo).bloqueios.some((b) => b.includes('arquivo de teste ausente')),
+  avaliarDor(lerSpec(provaQuebrada), alvo).bloqueios.some((b) => b.includes('arquivo ausente')),
 );
 
 const onze = writeFixture(
@@ -196,6 +196,26 @@ ok(
 );
 
 rmSync(alvoGate, { recursive: true, force: true });
+
+const { resolverProva, contarPassos } = await import(path.join(RAIZ, 'dist', 'spec', 'Prova.js'));
+const alvoProva = mkdtempSync(path.join(tmpdir(), 'harness-prova-'));
+mkdirSync(path.join(alvoProva, 'e2e', 'jornadas'), { recursive: true });
+mkdirSync(path.join(alvoProva, 'backend', 't'), { recursive: true });
+writeFileSync(path.join(alvoProva, 'backend', 't', 't.spec.ts'), '// t');
+writeFileSync(
+  path.join(alvoProva, 'e2e', 'jornadas', 'cliente.spec.ts'),
+  'test("x", async () => { await test.step("passo um", async () => {}) })',
+);
+
+ok('prova: unit existente resolve', resolverProva('unit:backend/t/t.spec.ts', alvoProva).resolvido);
+ok('prova: unit ausente falha', !resolverProva('unit:backend/t/nao.spec.ts', alvoProva).resolvido);
+ok('prova: jornada com passo resolve', resolverProva('jornada:cliente@passo um', alvoProva).resolvido);
+ok('prova: jornada com passo errado falha', !resolverProva('jornada:cliente@outro', alvoProva).resolvido);
+ok('prova: jornada inexistente falha', !resolverProva('jornada:fantasma', alvoProva).resolvido);
+ok('prova: api ainda não resolve', !resolverProva('api:qualquer', alvoProva).resolvido);
+ok('prova: conta passos da jornada', contarPassos(alvoProva, 'cliente') === 1);
+
+rmSync(alvoProva, { recursive: true, force: true });
 
 function writeFixture(nome, conteudo) {
   const dir = path.join(alvo, 'spec', nome);

@@ -49,7 +49,7 @@ ausente do CLI).
 | `ai verify ready` | roda o “definition of done” declarado | veredito | implementado |
 | `ai verify e2e` | roda as jornadas declaradas (+ digest) | `testRuns[]` | implementado |
 | `ai verify api` | persona de API (L1) | veredito | implementado |
-| `ai verify proofs` | confere se cada `CA` tem prova resolvida | `rastreio.json` | planejado (fase F) |
+| `ai verify proofs` | confere se cada `CA` tem prova resolvida | `rastreio.json` | implementado |
 | `ai fix <rwId>` | conduz um rework: fronteira, branch, dossiê | registro | implementado |
 | `ai fix <rwId> --verificar` | gates + veredito no registro | registro | implementado |
 | `ai fix --task <id> --feedback` | correção guiada por histórico (ex-`rework`) | código | planejado (fase E) |

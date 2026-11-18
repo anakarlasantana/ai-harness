@@ -21,7 +21,7 @@ ai spec   new|review|approve|list   # levantar e aprovar a spec (gate humano)
 ai plan   create <specId>      # desenho + tarefas (waves)     [fase D]
 ai build  code <taskId> "<instrução>" --spec <ID>  # implementação (exige G1; G2 se houver risco)
 ai build  review|simplify|ship|design|webperf|debug <taskId>
-ai verify ready|api            # prontidão e persona de API declaradas pelo alvo
+ai verify ready|api|proofs     # prontidão, persona de API e rastreio CA -> prova
 ai verify e2e [--journey nome] # jornadas ponta-a-ponta + digest
 ai fix    <rwId> [--verificar] # conduz um rework (fronteira, branch, veredito)
 ai ops    dashboard|doctor|models|index

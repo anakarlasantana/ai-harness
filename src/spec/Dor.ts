@@ -1,6 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { SpecRecord } from './SpecRecord.js';
+import { resolverProva } from './Prova.js';
 
 /**
  * Definition of Ready (DoR): o que a **máquina** confere antes de o humano
@@ -43,31 +42,15 @@ export function avaliarDor(spec: SpecRecord, cwd: string): DorResultado {
       continue;
     }
 
-    const [nivel, alvo] = ca.prova.split(':');
+    const resolvida = resolverProva(ca.prova, cwd);
 
-    if (!nivel || !NIVEIS.has(nivel)) {
-      bloqueios.push(`${ca.id}: nível de prova inválido ("${nivel}"); use unit, api ou jornada`);
-      continue;
+    if (!resolvida.resolvido) {
+      if (resolvida.tipo === 'api') avisos.push(`${ca.id}: ${resolvida.motivo}`);
+      else bloqueios.push(`${ca.id}: ${resolvida.motivo}`);
     }
 
-    if (nivel === 'api') {
-      avisos.push(`${ca.id}: prova em nível \`api\` (ainda não implementado — fase E)`);
-      continue;
-    }
-
-    if (nivel === 'unit' && alvo && !fs.existsSync(path.join(cwd, alvo))) {
-      bloqueios.push(`${ca.id}: arquivo de teste ausente (${alvo})`);
-    }
-
-    if (nivel === 'jornada' && alvo) {
-      const [nome, passo] = alvo.split('@');
-      const arquivo = path.join(cwd, 'e2e', 'jornadas', `${nome}.spec.ts`);
-
-      if (!fs.existsSync(arquivo)) {
-        bloqueios.push(`${ca.id}: jornada "${nome}" não existe em e2e/jornadas/`);
-      } else if (passo && !fs.readFileSync(arquivo, 'utf8').includes(`test.step("${passo}"`)) {
-        bloqueios.push(`${ca.id}: passo "${passo}" não existe na jornada ${nome}`);
-      }
+    if (!NIVEIS.has(resolvida.tipo ?? '')) {
+      bloqueios.push(`${ca.id}: nível de prova inválido; use unit, api ou jornada`);
     }
 
     if (!EARS.test(ca.texto)) {

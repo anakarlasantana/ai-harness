@@ -32,6 +32,7 @@ import {
 import type { LLMProvider } from '../providers/LLMProvider.js';
 import { startDashboard } from './dashboard.js';
 import { registerFixCommand } from './fix-command.js';
+import { registerProofsCommand } from './proofs-command.js';
 import { registerApiCommand, registerE2ECommand, runE2ECommand } from './verify-command.js';
 import { registerPlanCommand } from './plan-command.js';
 import { avaliarGates } from '../spec/Gates.js';
@@ -587,6 +588,7 @@ export function registerCommands(program: Command, env: AppEnv): void {
 
   registerE2ECommand(verify, env);
   registerApiCommand(verify, env);
+  registerProofsCommand(verify, env);
   registerFixCommand(program, env);
 
   const ops = program.command('ops').description('Ferramentas: configuração, modelos, mapa e dashboard');

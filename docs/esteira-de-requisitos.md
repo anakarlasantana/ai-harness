@@ -104,6 +104,22 @@ O rework segue a outra pista: `ai fix <RW-id>` exige `ca:` (o critério violado)
 como `testRuns[].kind = "api"`. Sem essa chave no `.harness/context.json`, o
 comando diz o que declarar em vez de inventar um comando.
 
+## 6.3 Ver o rastreio de fora (`verify proofs`)
+
+```bash
+ai verify proofs [--json]
+```
+
+Lê as specs do alvo e responde, sem escrever nada:
+
+- **cada CA** tem prova? qual? ela existe (arquivo, jornada e passo)?
+- **catálogo de jornadas**: nome, comando declarado em `e2e.journey`, quantos
+  `test.step` a spec tem e **qual CA ela prova**.
+
+Sai com código 1 quando uma prova declarada não resolve ou uma jornada
+declarada não tem spec — o artefato durável continua sendo o `rastreio.json` do
+alvo (`gen-rastreio --check`); aqui é leitura sob demanda, sem risco de drift.
+
 ## 7. Limites
 
 - O harness **não escreve** requisito nem código: ele lê, mede e registra.
